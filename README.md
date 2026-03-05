@@ -445,8 +445,9 @@ Submits a `PaymentChannelClaim` on-chain. Optionally redeems an off-chain claim 
 xrpl-up channel claim ABC123... --local --seed sDestSeed... --close
 
 # Redeem an off-chain claim
+# --public-key is the source wallet's public key (printed by channel sign)
 xrpl-up channel claim ABC123... --local --seed sDestSeed... \
-  --amount 3 --signature <hex-sig>
+  --amount 3 --signature <hex-sig> --public-key <source-public-key>
 ```
 
 ---

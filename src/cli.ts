@@ -459,14 +459,15 @@ channel
   .requiredOption('-s, --seed <seed>', 'Claimant wallet seed')
   .option('--amount <xrp>', 'XRP amount to claim (for off-chain claim)')
   .option('--signature <hex>', 'Off-chain claim signature from channel sign')
+  .option('--public-key <hex>', 'Public key of the wallet that signed the claim (printed by channel sign)')
   .option('--close', 'Request channel close')
   .action((channelId: string, opts: {
     local?: boolean; network: string; seed: string;
-    amount?: string; signature?: string; close?: boolean;
+    amount?: string; signature?: string; publicKey?: string; close?: boolean;
   }) => {
     channelClaimCommand({
       channelId, local: opts.local, network: opts.network, seed: opts.seed,
-      amount: opts.amount, signature: opts.signature, close: opts.close,
+      amount: opts.amount, signature: opts.signature, publicKey: opts.publicKey, close: opts.close,
     }).catch(handleError);
   });
 

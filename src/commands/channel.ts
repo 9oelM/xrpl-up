@@ -266,6 +266,7 @@ export interface ChannelClaimOptions {
   seed: string;
   amount?: string;    // XRP amount to claim (off-chain claim)
   signature?: string; // hex signature from channel sign
+  publicKey?: string; // public key of the wallet that produced the signature (source key)
   close?: boolean;    // request channel close
 }
 
@@ -300,7 +301,9 @@ export async function channelClaimCommand(options: ChannelClaimOptions): Promise
     if (options.amount)    tx['Balance']   = xrpToDrops(options.amount);
     if (options.signature) {
       tx['Signature'] = options.signature;
-      tx['PublicKey'] = wallet.publicKey;
+      // PublicKey must be the key that produced the off-chain signature (the source/signer
+      // wallet), NOT the claimant's key. Pass it via --public-key (printed by channel sign).
+      tx['PublicKey'] = options.publicKey ?? wallet.publicKey;
     }
 
     const prepared = await manager.client.autofill(tx as any);
@@ -357,7 +360,10 @@ export function channelSignCommand(options: ChannelSignOptions): void {
   row('Amount',     chalk.green(options.amount + ' XRP'));
   logger.blank();
   logger.dim(
-    `  Verify with: xrpl-up channel verify ${options.channelId} ${options.amount} ${signature} ${wallet.publicKey}`
+    `  Verify: xrpl-up channel verify ${options.channelId} ${options.amount} ${signature} ${wallet.publicKey}`
+  );
+  logger.dim(
+    `  Claim:  xrpl-up channel claim ${options.channelId} --amount ${options.amount} --signature ${signature} --public-key ${wallet.publicKey} --seed <dest-seed>`
   );
   logger.blank();
 }

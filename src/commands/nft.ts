@@ -40,23 +40,27 @@ function resolveNetworkInfo(options: { local?: boolean; network?: string }): Net
 
 /**
  * Parse a price string into an XRPL Amount.
- * "1"          → XRP drops string  (1 XRP)
- * "10.USD.rX"  → IOU object
+ * "1"           → XRP drops string  (1 XRP)
+ * "10.USD.rX"   → IOU object
+ * "10.5.USD.rX" → IOU object with decimal value (value=10.5, currency=USD)
+ *
+ * Format: <numeric_value>.<CURRENCY_CODE>.<issuer_address>
+ * The regex correctly handles decimal values like "10.5" by capturing the
+ * full numeric part before the currency code.
  */
 function parsePrice(raw: string): string | { currency: string; issuer: string; value: string } {
   if (/^\d+(\.\d+)?$/.test(raw)) {
     return xrpToDrops(raw);
   }
-  const parts = raw.split('.');
-  if (parts.length < 3) {
+  // Match: <decimal-value> . <currency 3-40 chars> . <issuer>
+  const match = raw.match(/^(\d+(?:\.\d+)?)\.([A-Za-z0-9]{3,40})\.(.+)$/);
+  if (!match) {
     throw new Error(
       `Invalid price "${raw}". Use "1" for 1 XRP or "10.USD.rIssuerAddress" for IOU.`
     );
   }
-  const value    = parts[0];
-  const currency = parts[1];
-  const issuer   = parts.slice(2).join('.');
-  return { currency, issuer, value };
+  const [, value, currency, issuer] = match;
+  return { currency: currency.toUpperCase(), issuer, value };
 }
 
 function formatAmount(amount: string | { currency: string; issuer: string; value: string }): string {
