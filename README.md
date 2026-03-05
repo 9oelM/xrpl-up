@@ -67,7 +67,7 @@ xrpl-up channel create rDestination... 10 --local
 `xrpl-up` has two command sets:
 
 - **Sandbox operation commands**: environment lifecycle and state control (`node`, `stop`, `reset`, `snapshot`, `status`, `accounts`, `logs`, `config`, `run`, `init`, `faucet`).
-- **rippled API wrapper commands**: convenience workflows for demos and quick experimentation (`amm`, `nft`, `channel`, `mpt`).
+- **rippled API wrapper commands**: convenience workflows for demos and quick experimentation (`amm`, `nft`, `channel`, `mpt`, `offer`, `trustline`, `escrow`, `check`, `accountset`).
 
 Wrapper commands are intentionally non-exhaustive. For complex or production-grade flows, use `xrpl.js` directly or call `rippled` RPC endpoints.
 
@@ -537,6 +537,247 @@ Shows on-ledger details of an MPT issuance: issuer, outstanding supply, flags, a
 
 ```bash
 xrpl-up mpt info 00070C4495F14B0E... --local
+```
+
+---
+
+### `xrpl-up offer`
+
+DEX (decentralized exchange) offer operations. The XRPL DEX is a built-in order book — no smart contracts needed.
+
+#### `xrpl-up offer create <pays> <gets>`
+
+Creates a limit order. `<pays>` is what you put in; `<gets>` is what you want out. When `--seed` is omitted a wallet is auto-funded via faucet.
+
+Asset format: `"5"` = 5 XRP, `"10.USD.rIssuer"` = IOU (same as AMM). Decimal values like `"10.5.USD.rIssuer"` are supported.
+
+```bash
+# Offer 10 USD for 5 XRP (local, auto-funds wallet)
+xrpl-up offer create "10.USD.rHb9..." "5" --local
+
+# Offer 5 XRP for 10 USD on testnet
+xrpl-up offer create "5" "10.USD.rHb9..." --seed sn3nxiW7...
+
+# Immediate-or-cancel sell offer
+xrpl-up offer create "5" "10.USD.rHb9..." --sell --immediate-or-cancel --seed sn3nxiW7...
+```
+
+| Flag | Description |
+|------|-------------|
+| `--passive` | Do not consume matching offers at equal price |
+| `--sell` | Sell exactly `TakerPays` regardless of `TakerGets` minimum |
+| `--immediate-or-cancel` | Fill what is possible immediately, cancel the rest |
+| `--fill-or-kill` | Fill the full amount or cancel entirely |
+
+#### `xrpl-up offer cancel <sequence>`
+
+Cancels an open offer by its sequence number (printed by `offer create`).
+
+```bash
+xrpl-up offer cancel 42 --local --seed sn3nxiW7...
+```
+
+#### `xrpl-up offer list`
+
+Lists all open DEX offers for an account.
+
+```bash
+xrpl-up offer list --local
+xrpl-up offer list --local --account rSomeAddress...
+```
+
+---
+
+### `xrpl-up trustline`
+
+Trust line operations. Trust lines allow accounts to hold issued currencies (IOUs) from a specific issuer.
+
+#### `xrpl-up trustline set <currency.rIssuer> <limit>`
+
+Creates or updates a trust line. `<limit>` is the maximum IOU balance you are willing to hold.
+
+```bash
+# Set a USD trust line with a 1000 limit
+xrpl-up trustline set USD.rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh 1000 --local --seed sn3nxiW7...
+
+# Set with NoRipple (prevents rippling through this trust line)
+xrpl-up trustline set USD.rHb9... 1000 --local --seed sn3nxiW7... --no-ripple
+```
+
+#### `xrpl-up trustline freeze <currency.rIssuer>`
+
+Freezes (or unfreezes) a trust line. Only the issuer can freeze.
+
+```bash
+xrpl-up trustline freeze USD.rHolderAddress... --local --seed sIssuerSeed...
+
+# Unfreeze
+xrpl-up trustline freeze USD.rHolderAddress... --local --seed sIssuerSeed... --unfreeze
+```
+
+#### `xrpl-up trustline list`
+
+Lists all trust lines for an account — balance, limit, NoRipple, and freeze status.
+
+```bash
+xrpl-up trustline list --local
+xrpl-up trustline list --local --account rSomeAddress...
+```
+
+#### `xrpl-up trustline issuer-defaults`
+
+Sets `DefaultRipple` on the issuer account so all new trust lines have rippling enabled by default (required for most IOU payment flows).
+
+```bash
+# Enable DefaultRipple
+xrpl-up trustline issuer-defaults --local --seed sIssuerSeed...
+
+# Clear DefaultRipple
+xrpl-up trustline issuer-defaults --local --seed sIssuerSeed... --no-ripple
+```
+
+---
+
+### `xrpl-up escrow`
+
+Escrow operations. Escrows lock XRP until a time condition or crypto-condition is met.
+
+#### `xrpl-up escrow create <destination> <amount>`
+
+Creates an escrow. At least one of `--finish-after`, `--cancel-after`, or `--condition` is required. When `--seed` is omitted a wallet is auto-funded.
+
+Time expressions: `+30m`, `+1h`, `+1d`, `+7d` (relative from now), or an absolute Unix timestamp.
+
+```bash
+# Time-locked: can finish after 1 hour, auto-cancels after 7 days
+xrpl-up escrow create rDest... 10 --local \
+  --finish-after +1h --cancel-after +7d
+
+# Crypto-condition escrow
+xrpl-up escrow create rDest... 10 --local \
+  --condition A0258020... --cancel-after +7d --seed sn3nxiW7...
+```
+
+#### `xrpl-up escrow finish <owner> <sequence>`
+
+Releases the escrowed funds to the destination after the `FinishAfter` time has passed. For crypto-condition escrows, `--fulfillment` and `--condition` are required.
+
+```bash
+# Time-based finish
+xrpl-up escrow finish rOwner... 42 --local --seed sDestSeed...
+
+# Crypto-condition finish
+xrpl-up escrow finish rOwner... 42 --local --seed sDestSeed... \
+  --fulfillment A0228020... --condition A0258020...
+```
+
+#### `xrpl-up escrow cancel <owner> <sequence>`
+
+Cancels an expired escrow (after `CancelAfter` time) and returns XRP to the owner.
+
+```bash
+xrpl-up escrow cancel rOwner... 42 --local --seed sn3nxiW7...
+```
+
+#### `xrpl-up escrow list`
+
+Lists escrows for an account, showing amounts, times, and conditions.
+
+```bash
+xrpl-up escrow list --local
+xrpl-up escrow list --local --account rSomeAddress...
+```
+
+---
+
+### `xrpl-up check`
+
+Check operations. Checks are a deferred payment mechanism — the sender authorizes a maximum amount that the destination can cash at any time before expiry.
+
+#### `xrpl-up check create <destination> <sendMax>`
+
+Creates a check. `<sendMax>` is the maximum the destination can receive.
+
+```bash
+# Create a 5 XRP check (valid for 7 days)
+xrpl-up check create rDest... 5 --local --seed sn3nxiW7... --expiry +7d
+
+# Create an IOU check
+xrpl-up check create rDest... "10.USD.rHb9..." --local --seed sn3nxiW7...
+```
+
+#### `xrpl-up check cash <checkId> [amount]`
+
+Cashes a check. Provide an exact `[amount]` or `--deliver-min` for a flexible minimum (the destination receives as much as possible up to `SendMax`).
+
+```bash
+# Cash exactly 5 XRP
+xrpl-up check cash ABC123... 5 --local --seed sDestSeed...
+
+# Cash flexibly — receive at least 3 XRP
+xrpl-up check cash ABC123... --deliver-min 3 --local --seed sDestSeed...
+```
+
+#### `xrpl-up check cancel <checkId>`
+
+Cancels a check (sender or destination can cancel; anyone can cancel after expiry).
+
+```bash
+xrpl-up check cancel ABC123... --local --seed sn3nxiW7...
+```
+
+#### `xrpl-up check list`
+
+Lists outstanding checks for an account.
+
+```bash
+xrpl-up check list --local
+xrpl-up check list --local --account rSomeAddress...
+```
+
+---
+
+### `xrpl-up accountset`
+
+Account settings — enable/disable flags, configure signer lists for multi-signing.
+
+#### `xrpl-up accountset set <flag>` / `xrpl-up accountset clear <flag>`
+
+Enables or disables a named account flag. Each command prints a ready-to-use undo command.
+
+| Flag | Description |
+|------|-------------|
+| `requireDest` | Require a destination tag on all incoming payments |
+| `requireAuth` | Require the issuer to authorize all trust lines |
+| `disallowXRP` | Signal that this account does not accept direct XRP payments |
+| `disableMaster` | Disable the master key (use only after setting a signer list) |
+| `defaultRipple` | Enable rippling on all new trust lines (issuers) |
+| `depositAuth` | Only accept payments from pre-authorized senders |
+
+```bash
+xrpl-up accountset set requireDest --local --seed sn3nxiW7...
+xrpl-up accountset clear requireDest --local --seed sn3nxiW7...
+```
+
+#### `xrpl-up accountset signer-list <quorum> <signers>`
+
+Sets a multi-signer list. `<signers>` is a comma-separated list of `rAddress:weight` pairs.
+
+```bash
+# Require 2-of-3 signatures
+xrpl-up accountset signer-list 2 "rAlice...:1,rBob...:1,rCarol...:1" \
+  --local --seed sn3nxiW7...
+```
+
+> **Note:** Set a signer list before disabling the master key (`disableMaster`). Doing it in the wrong order will permanently lock the account.
+
+#### `xrpl-up accountset info`
+
+Shows the account's current flags, balance, sequence, and signer list if one is set. Includes a reminder of all valid flag names and the toggle commands.
+
+```bash
+xrpl-up accountset info --local
+xrpl-up accountset info --local --account rSomeAddress...
 ```
 
 ---

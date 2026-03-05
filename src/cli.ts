@@ -24,6 +24,25 @@ import {
   mptCreateCommand, mptDestroyCommand, mptAuthorizeCommand,
   mptSetCommand, mptInfoCommand,
 } from './commands/mpt';
+import {
+  offerCreateCommand, offerCancelCommand, offerListCommand,
+} from './commands/offer';
+import {
+  trustlineSetCommand, trustlineFreezeCommand,
+  trustlineListCommand, trustlineIssuerDefaultsCommand,
+} from './commands/trustline';
+import {
+  escrowCreateCommand, escrowFinishCommand,
+  escrowCancelCommand, escrowListCommand,
+} from './commands/escrow';
+import {
+  checkCreateCommand, checkCashCommand,
+  checkCancelCommand, checkListCommand,
+} from './commands/check';
+import {
+  accountSetFlagCommand, accountClearFlagCommand,
+  accountSignerListCommand, accountInfoCommand,
+} from './commands/accountset';
 
 import { logger } from './utils/logger';
 
@@ -575,6 +594,287 @@ mpt
   .option('-n, --network <network>', 'Network', 'testnet')
   .action((issuanceId: string, opts: { local?: boolean; network: string }) => {
     mptInfoCommand({ issuanceId, local: opts.local, network: opts.network })
+      .catch(handleError);
+  });
+
+// ── offer ─────────────────────────────────────────────────────────────────────
+const offer = program
+  .command('offer')
+  .description('DEX offer operations (create, cancel, list)');
+
+offer
+  .command('create <pays> <gets>')
+  .description('Create a DEX offer. Format: "5" = 5 XRP, "10.USD.rIssuer" = IOU')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .option('-s, --seed <seed>', 'Wallet seed (omit to auto-fund via faucet)')
+  .option('--passive', 'Do not consume matching offers at equal price')
+  .option('--sell', 'Sell exactly TakerPays regardless of TakerGets minimum')
+  .option('--immediate-or-cancel', 'Fill what is possible immediately, cancel the rest')
+  .option('--fill-or-kill', 'Fill the full amount or cancel entirely')
+  .action((pays: string, gets: string, opts: {
+    local?: boolean; network: string; seed?: string;
+    passive?: boolean; sell?: boolean; immediateOrCancel?: boolean; fillOrKill?: boolean;
+  }) => {
+    offerCreateCommand({
+      pays, gets, local: opts.local, network: opts.network, seed: opts.seed,
+      passive: opts.passive, sell: opts.sell,
+      immediateOrCancel: opts.immediateOrCancel, fillOrKill: opts.fillOrKill,
+    }).catch(handleError);
+  });
+
+offer
+  .command('cancel <sequence>')
+  .description('Cancel a DEX offer by its sequence number')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Wallet seed')
+  .action((sequence: string, opts: { local?: boolean; network: string; seed: string }) => {
+    offerCancelCommand({
+      sequence: parseInt(sequence, 10), local: opts.local, network: opts.network, seed: opts.seed,
+    }).catch(handleError);
+  });
+
+offer
+  .command('list')
+  .description('List open DEX offers for an account')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .option('--account <address>', 'Account to list (defaults to first local account)')
+  .action((opts: { local?: boolean; network: string; account?: string }) => {
+    offerListCommand({ local: opts.local, network: opts.network, account: opts.account })
+      .catch(handleError);
+  });
+
+// ── trustline ─────────────────────────────────────────────────────────────────
+const trustline = program
+  .command('trustline')
+  .description('Trust line operations (set, freeze, list, issuer-defaults)');
+
+trustline
+  .command('set <currencyIssuer> <limit>')
+  .description('Create or update a trust line. Format: "USD.rIssuerAddress"')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Wallet seed of the trust line holder')
+  .option('--no-ripple', 'Disable rippling on this trust line')
+  .option('--auth', 'Authorize the trust line (lsfAuth — issuer side)')
+  .action((currencyIssuer: string, limit: string, opts: {
+    local?: boolean; network: string; seed: string; noRipple?: boolean; auth?: boolean;
+  }) => {
+    trustlineSetCommand({
+      currencyIssuer, limit, local: opts.local, network: opts.network, seed: opts.seed,
+      noRipple: opts.noRipple, auth: opts.auth,
+    }).catch(handleError);
+  });
+
+trustline
+  .command('freeze <currencyIssuer>')
+  .description('Freeze (or unfreeze) a trust line. Format: "USD.rIssuerAddress"')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Wallet seed of the issuer')
+  .option('--unfreeze', 'Clear the freeze instead of setting it')
+  .action((currencyIssuer: string, opts: { local?: boolean; network: string; seed: string; unfreeze?: boolean }) => {
+    trustlineFreezeCommand({ currencyIssuer, local: opts.local, network: opts.network, seed: opts.seed, unfreeze: opts.unfreeze })
+      .catch(handleError);
+  });
+
+trustline
+  .command('list')
+  .description('List trust lines for an account')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .option('--account <address>', 'Account to list (defaults to first local account)')
+  .action((opts: { local?: boolean; network: string; account?: string }) => {
+    trustlineListCommand({ local: opts.local, network: opts.network, account: opts.account })
+      .catch(handleError);
+  });
+
+trustline
+  .command('issuer-defaults')
+  .description('Enable DefaultRipple on the issuer account (--no-ripple to clear)')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Issuer wallet seed')
+  .option('--no-ripple', 'Clear DefaultRipple instead of setting it')
+  .action((opts: { local?: boolean; network: string; seed: string; noRipple?: boolean }) => {
+    trustlineIssuerDefaultsCommand({ local: opts.local, network: opts.network, seed: opts.seed, noRipple: opts.noRipple })
+      .catch(handleError);
+  });
+
+// ── escrow ────────────────────────────────────────────────────────────────────
+const escrow = program
+  .command('escrow')
+  .description('Escrow operations (create, finish, cancel, list)');
+
+escrow
+  .command('create <destination> <amount>')
+  .description('Create a time-locked or condition-locked escrow. Amount is in XRP.')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .option('-s, --seed <seed>', 'Wallet seed (omit to auto-fund via faucet)')
+  .option('--finish-after <time>', 'Earliest finish time: "+1h", "+30m", "+1d" or Unix timestamp')
+  .option('--cancel-after <time>', 'Auto-cancel after: "+1h", "+30m", "+7d" or Unix timestamp')
+  .option('--condition <hex>', 'PREIMAGE-SHA-256 crypto-condition (hex)')
+  .option('--destination-tag <n>', 'Destination tag', parseInt)
+  .action((destination: string, amount: string, opts: {
+    local?: boolean; network: string; seed?: string;
+    finishAfter?: string; cancelAfter?: string; condition?: string; destinationTag?: number;
+  }) => {
+    escrowCreateCommand({
+      destination, amount, local: opts.local, network: opts.network, seed: opts.seed,
+      finishAfter: opts.finishAfter, cancelAfter: opts.cancelAfter,
+      condition: opts.condition, destinationTag: opts.destinationTag,
+    }).catch(handleError);
+  });
+
+escrow
+  .command('finish <owner> <sequence>')
+  .description('Finish an escrow and release funds to the destination')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Claimant wallet seed')
+  .option('--fulfillment <hex>', 'Crypto-condition fulfillment (required for condition escrows)')
+  .option('--condition <hex>', 'Crypto-condition (required with --fulfillment)')
+  .action((owner: string, sequence: string, opts: {
+    local?: boolean; network: string; seed: string; fulfillment?: string; condition?: string;
+  }) => {
+    escrowFinishCommand({
+      owner, sequence: parseInt(sequence, 10), local: opts.local, network: opts.network,
+      seed: opts.seed, fulfillment: opts.fulfillment, condition: opts.condition,
+    }).catch(handleError);
+  });
+
+escrow
+  .command('cancel <owner> <sequence>')
+  .description('Cancel an expired escrow and return funds to the owner')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Wallet seed')
+  .action((owner: string, sequence: string, opts: { local?: boolean; network: string; seed: string }) => {
+    escrowCancelCommand({ owner, sequence: parseInt(sequence, 10), local: opts.local, network: opts.network, seed: opts.seed })
+      .catch(handleError);
+  });
+
+escrow
+  .command('list')
+  .description('List escrows for an account')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .option('--account <address>', 'Account to list (defaults to first local account)')
+  .action((opts: { local?: boolean; network: string; account?: string }) => {
+    escrowListCommand({ local: opts.local, network: opts.network, account: opts.account })
+      .catch(handleError);
+  });
+
+// ── check ─────────────────────────────────────────────────────────────────────
+const check = program
+  .command('check')
+  .description('Check (deferred payment) operations (create, cash, cancel, list)');
+
+check
+  .command('create <destination> <sendMax>')
+  .description('Create a check. sendMax: "5" = 5 XRP, "10.USD.rIssuer" = IOU')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Sender wallet seed')
+  .option('--expiry <time>', 'Expiry time: "+1h", "+30m", "+7d" or Unix timestamp')
+  .option('--destination-tag <n>', 'Destination tag', parseInt)
+  .action((destination: string, sendMax: string, opts: {
+    local?: boolean; network: string; seed: string; expiry?: string; destinationTag?: number;
+  }) => {
+    checkCreateCommand({
+      destination, sendMax, local: opts.local, network: opts.network, seed: opts.seed,
+      expiry: opts.expiry, destinationTag: opts.destinationTag,
+    }).catch(handleError);
+  });
+
+check
+  .command('cash <checkId> [amount]')
+  .description('Cash a check. Provide exact [amount] or use --deliver-min for flexible amount')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Destination wallet seed')
+  .option('--deliver-min <amount>', 'Minimum amount to accept (flexible — may receive more)')
+  .action((checkId: string, amount: string | undefined, opts: {
+    local?: boolean; network: string; seed: string; deliverMin?: string;
+  }) => {
+    checkCashCommand({
+      checkId, amount, local: opts.local, network: opts.network,
+      seed: opts.seed, deliverMin: opts.deliverMin,
+    }).catch(handleError);
+  });
+
+check
+  .command('cancel <checkId>')
+  .description('Cancel a check')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Wallet seed (sender or destination)')
+  .action((checkId: string, opts: { local?: boolean; network: string; seed: string }) => {
+    checkCancelCommand({ checkId, local: opts.local, network: opts.network, seed: opts.seed })
+      .catch(handleError);
+  });
+
+check
+  .command('list')
+  .description('List outstanding checks for an account')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .option('--account <address>', 'Account to list (defaults to first local account)')
+  .action((opts: { local?: boolean; network: string; account?: string }) => {
+    checkListCommand({ local: opts.local, network: opts.network, account: opts.account })
+      .catch(handleError);
+  });
+
+// ── accountset ────────────────────────────────────────────────────────────────
+const accountset = program
+  .command('accountset')
+  .description('Account settings: set/clear flags, manage signer lists');
+
+accountset
+  .command('set <flag>')
+  .description('Enable an account flag. Valid: requireDest, requireAuth, disallowXRP, disableMaster, defaultRipple, depositAuth')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Wallet seed')
+  .action((flag: string, opts: { local?: boolean; network: string; seed: string }) => {
+    accountSetFlagCommand({ flag, local: opts.local, network: opts.network, seed: opts.seed })
+      .catch(handleError);
+  });
+
+accountset
+  .command('clear <flag>')
+  .description('Disable an account flag. Valid: requireDest, requireAuth, disallowXRP, disableMaster, defaultRipple, depositAuth')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Wallet seed')
+  .action((flag: string, opts: { local?: boolean; network: string; seed: string }) => {
+    accountClearFlagCommand({ flag, local: opts.local, network: opts.network, seed: opts.seed })
+      .catch(handleError);
+  });
+
+accountset
+  .command('signer-list <quorum> <signers>')
+  .description('Set a multi-signer list. signers: comma-separated "rAddress:weight" pairs')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Wallet seed')
+  .action((quorum: string, signers: string, opts: { local?: boolean; network: string; seed: string }) => {
+    accountSignerListCommand({
+      quorum: parseInt(quorum, 10), signers, local: opts.local, network: opts.network, seed: opts.seed,
+    }).catch(handleError);
+  });
+
+accountset
+  .command('info')
+  .description('Show account flags, settings, and signer list')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .option('--account <address>', 'Account to query (defaults to first local account)')
+  .action((opts: { local?: boolean; network: string; account?: string }) => {
+    accountInfoCommand({ local: opts.local, network: opts.network, account: opts.account })
       .catch(handleError);
   });
 
