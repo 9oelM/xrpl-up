@@ -143,7 +143,8 @@ main().catch((err) => {
 const EXAMPLE_NFT_SCRIPT = `// scripts/example-nft.ts
 // Mint an NFT on XRPL testnet
 // Run with: xrpl-up run scripts/example-nft.ts
-import { Client, convertStringToHex } from 'xrpl';
+import { Client } from 'xrpl';
+import { stringToHex } from '@xrplf/isomorphic/utils';
 
 async function main() {
   const networkUrl = process.env.XRPL_NETWORK_URL ?? 'wss://s.altnet.rippletest.net:51233';
@@ -154,7 +155,7 @@ async function main() {
   const { wallet: minter } = await client.fundWallet();
   console.log('Minter:', minter.address);
 
-  const uri = convertStringToHex('https://example.com/my-nft-metadata.json');
+  const uri = stringToHex('https://example.com/my-nft-metadata.json');
 
   console.log('\\nMinting NFT…');
   const result = await client.submitAndWait(
@@ -263,7 +264,8 @@ const EXAMPLE_NFT_LOCAL = `// scripts/example-nft.ts
 // Mint an NFT on the local xrpl-up sandbox
 // Run with: xrpl-up run scripts/example-nft.ts
 // Requires: xrpl-up node --local  (running in another terminal)
-import { Client, Wallet, convertStringToHex } from 'xrpl';
+import { Client, Wallet } from 'xrpl';
+import { stringToHex } from '@xrplf/isomorphic/utils';
 
 const NETWORK_URL = process.env.XRPL_NETWORK_URL ?? 'ws://localhost:6006';
 const FAUCET_URL  = 'http://localhost:3001';
@@ -284,7 +286,7 @@ async function main() {
   const minter = await fundAccount();
   console.log('Minter:', minter.address);
 
-  const uri = convertStringToHex('https://example.com/my-nft-metadata.json');
+  const uri = stringToHex('https://example.com/my-nft-metadata.json');
 
   console.log('\\nMinting NFT…');
   const result = await client.submitAndWait(

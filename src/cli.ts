@@ -12,6 +12,18 @@ import { snapshotSave, snapshotRestore, snapshotList } from './commands/snapshot
 import { configExport, configValidate } from './commands/config';
 import { ammInfoCommand, ammCreateCommand } from './commands/amm';
 import { resetCommand } from './commands/reset';
+import {
+  nftMintCommand, nftListCommand, nftOffersCommand,
+  nftBurnCommand, nftSellCommand, nftAcceptCommand,
+} from './commands/nft';
+import {
+  channelCreateCommand, channelListCommand, channelFundCommand,
+  channelClaimCommand, channelSignCommand, channelVerifyCommand,
+} from './commands/channel';
+import {
+  mptCreateCommand, mptDestroyCommand, mptAuthorizeCommand,
+  mptSetCommand, mptInfoCommand,
+} from './commands/mpt';
 
 import { logger } from './utils/logger';
 
@@ -311,6 +323,259 @@ amm
     }).catch(handleError);
   });
 
+
+// ── nft ───────────────────────────────────────────────────────────────────────
+const nft = program
+  .command('nft')
+  .description('NFT lifecycle operations (mint, list, sell, buy, burn)');
+
+nft
+  .command('mint')
+  .description('Mint a new NFT (auto-funds a wallet on local)')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .option('-s, --seed <seed>', 'Wallet seed to mint from (omit to auto-fund on local)')
+  .option('--uri <uri>', 'Metadata URI (will be hex-encoded)')
+  .option('--transferable', 'Allow the NFT to be transferred (tfTransferable)')
+  .option('--burnable', 'Allow the issuer to burn the NFT (tfBurnable)')
+  .option('--taxon <number>', 'NFToken taxon (default: 0)')
+  .option('--transfer-fee <percent>', 'Transfer fee percentage, 0–50 (default: 0)')
+  .action((opts: {
+    local?: boolean; network: string; seed?: string; uri?: string;
+    transferable?: boolean; burnable?: boolean; taxon?: string; transferFee?: string;
+  }) => {
+    nftMintCommand({
+      local: opts.local, network: opts.network, seed: opts.seed, uri: opts.uri,
+      transferable: opts.transferable, burnable: opts.burnable,
+      taxon: opts.taxon !== undefined ? parseInt(opts.taxon, 10) : undefined,
+      transferFee: opts.transferFee !== undefined ? Number(opts.transferFee) : undefined,
+    }).catch(handleError);
+  });
+
+nft
+  .command('list')
+  .description('List NFTs owned by an account')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .option('--account <address>', 'Account to list (defaults to first local account)')
+  .action((opts: { local?: boolean; network: string; account?: string }) => {
+    nftListCommand({ local: opts.local, network: opts.network, account: opts.account })
+      .catch(handleError);
+  });
+
+nft
+  .command('offers <nftokenId>')
+  .description('Show open buy and sell offers for an NFT')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .action((nftokenId: string, opts: { local?: boolean; network: string }) => {
+    nftOffersCommand({ nftokenId, local: opts.local, network: opts.network })
+      .catch(handleError);
+  });
+
+nft
+  .command('burn <nftokenId>')
+  .description('Burn an NFT (permanently destroy it)')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Wallet seed of the NFT holder')
+  .action((nftokenId: string, opts: { local?: boolean; network: string; seed: string }) => {
+    nftBurnCommand({ nftokenId, local: opts.local, network: opts.network, seed: opts.seed })
+      .catch(handleError);
+  });
+
+nft
+  .command('sell <nftokenId> <price>')
+  .description('Create a sell offer for an NFT. Price: "1" = 1 XRP, "10.USD.rIssuer" = IOU')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Wallet seed of the NFT holder')
+  .action((nftokenId: string, price: string, opts: { local?: boolean; network: string; seed: string }) => {
+    nftSellCommand({ nftokenId, price, local: opts.local, network: opts.network, seed: opts.seed })
+      .catch(handleError);
+  });
+
+nft
+  .command('accept <offerId>')
+  .description('Accept an NFT sell (or buy with --buy) offer')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .option('-s, --seed <seed>', 'Wallet seed of the buyer (omit to auto-fund on local)')
+  .option('--buy', 'Accept a buy offer instead of a sell offer')
+  .action((offerId: string, opts: { local?: boolean; network: string; seed?: string; buy?: boolean }) => {
+    nftAcceptCommand({
+      offerId, local: opts.local, network: opts.network, seed: opts.seed, buy: opts.buy,
+    }).catch(handleError);
+  });
+
+// ── channel ───────────────────────────────────────────────────────────────────
+const channel = program
+  .command('channel')
+  .description('Payment channel operations (create, fund, claim, sign, verify)');
+
+channel
+  .command('create <destination> <amount>')
+  .description('Create a payment channel. Amount is in XRP.')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .option('-s, --seed <seed>', 'Source wallet seed (omit to auto-fund on local)')
+  .option('--settle-delay <seconds>', 'Settlement delay in seconds (default: 86400)')
+  .action((destination: string, amount: string, opts: {
+    local?: boolean; network: string; seed?: string; settleDelay?: string;
+  }) => {
+    channelCreateCommand({
+      destination, amount, local: opts.local, network: opts.network, seed: opts.seed,
+      settleDelay: opts.settleDelay !== undefined ? parseInt(opts.settleDelay, 10) : undefined,
+    }).catch(handleError);
+  });
+
+channel
+  .command('list')
+  .description('List payment channels for an account')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .option('--account <address>', 'Account to list channels for (defaults to first local account)')
+  .action((opts: { local?: boolean; network: string; account?: string }) => {
+    channelListCommand({ local: opts.local, network: opts.network, account: opts.account })
+      .catch(handleError);
+  });
+
+channel
+  .command('fund <channelId> <amount>')
+  .description('Add XRP to an existing payment channel')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Source wallet seed')
+  .action((channelId: string, amount: string, opts: { local?: boolean; network: string; seed: string }) => {
+    channelFundCommand({ channelId, amount, local: opts.local, network: opts.network, seed: opts.seed })
+      .catch(handleError);
+  });
+
+channel
+  .command('claim <channelId>')
+  .description('Claim funds from a payment channel (use --close to close)')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Claimant wallet seed')
+  .option('--amount <xrp>', 'XRP amount to claim (for off-chain claim)')
+  .option('--signature <hex>', 'Off-chain claim signature from channel sign')
+  .option('--close', 'Request channel close')
+  .action((channelId: string, opts: {
+    local?: boolean; network: string; seed: string;
+    amount?: string; signature?: string; close?: boolean;
+  }) => {
+    channelClaimCommand({
+      channelId, local: opts.local, network: opts.network, seed: opts.seed,
+      amount: opts.amount, signature: opts.signature, close: opts.close,
+    }).catch(handleError);
+  });
+
+channel
+  .command('sign <channelId> <amount>')
+  .description('Sign an off-chain payment channel claim (no on-chain transaction)')
+  .requiredOption('-s, --seed <seed>', 'Source wallet seed')
+  .action((channelId: string, amount: string, opts: { seed: string }) => {
+    channelSignCommand({ channelId, amount, seed: opts.seed });
+  });
+
+channel
+  .command('verify <channelId> <amount> <signature> <publicKey>')
+  .description('Verify an off-chain payment channel claim signature')
+  .action((channelId: string, amount: string, signature: string, publicKey: string) => {
+    channelVerifyCommand({ channelId, amount, signature, publicKey });
+  });
+
+// ── mpt ───────────────────────────────────────────────────────────────────────
+const mpt = program
+  .command('mpt')
+  .description('Multi-Purpose Token (MPT/XLS-33) operations');
+
+mpt
+  .command('create')
+  .description('Create a new MPT issuance (auto-funds wallet on local)')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .option('-s, --seed <seed>', 'Issuer wallet seed (omit to auto-fund on local)')
+  .option('--max-amount <integer>', 'Maximum token supply (integer, e.g. 1000000)')
+  .option('--asset-scale <number>', 'Decimal places / asset scale, 0–19 (default: 0)')
+  .option('--transfer-fee <number>', 'Transfer fee in hundredths of a percent, 0–50000')
+  .option('--metadata <string>', 'Metadata string (will be hex-encoded)')
+  .option('--transferable', 'Allow holders to transfer tokens (tfMPTCanTransfer)')
+  .option('--require-auth', 'Issuer must authorize each holder (tfMPTRequireAuth)')
+  .option('--can-lock', 'Issuer can lock individual holders (tfMPTCanLock)')
+  .option('--can-clawback', 'Issuer can clawback tokens from holders (tfMPTCanClawback)')
+  .action((opts: {
+    local?: boolean; network: string; seed?: string;
+    maxAmount?: string; assetScale?: string; transferFee?: string; metadata?: string;
+    transferable?: boolean; requireAuth?: boolean; canLock?: boolean; canClawback?: boolean;
+  }) => {
+    mptCreateCommand({
+      local: opts.local, network: opts.network, seed: opts.seed,
+      maxAmount: opts.maxAmount,
+      assetScale: opts.assetScale !== undefined ? parseInt(opts.assetScale, 10) : undefined,
+      transferFee: opts.transferFee !== undefined ? parseInt(opts.transferFee, 10) : undefined,
+      metadata: opts.metadata,
+      transferable: opts.transferable, requireAuth: opts.requireAuth,
+      canLock: opts.canLock, canClawback: opts.canClawback,
+    }).catch(handleError);
+  });
+
+mpt
+  .command('destroy <issuanceId>')
+  .description('Destroy an MPT issuance (supply must be zero)')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Issuer wallet seed')
+  .action((issuanceId: string, opts: { local?: boolean; network: string; seed: string }) => {
+    mptDestroyCommand({ issuanceId, local: opts.local, network: opts.network, seed: opts.seed })
+      .catch(handleError);
+  });
+
+mpt
+  .command('authorize <issuanceId>')
+  .description('Authorize (or unauthorize) a token holder to hold the MPT')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Issuer or holder wallet seed')
+  .option('--holder <address>', 'Holder address to authorize (issuer-side auth)')
+  .option('--unauthorize', 'Remove authorization instead of granting it')
+  .action((issuanceId: string, opts: {
+    local?: boolean; network: string; seed: string; holder?: string; unauthorize?: boolean;
+  }) => {
+    mptAuthorizeCommand({
+      issuanceId, local: opts.local, network: opts.network, seed: opts.seed,
+      holder: opts.holder, unauthorize: opts.unauthorize,
+    }).catch(handleError);
+  });
+
+mpt
+  .command('set <issuanceId>')
+  .description('Lock or unlock an MPT issuance (or a specific holder)')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Issuer wallet seed')
+  .option('--lock', 'Lock the issuance (or holder)')
+  .option('--unlock', 'Unlock the issuance (or holder)')
+  .option('--holder <address>', 'Apply lock/unlock to a specific holder address')
+  .action((issuanceId: string, opts: {
+    local?: boolean; network: string; seed: string;
+    lock?: boolean; unlock?: boolean; holder?: string;
+  }) => {
+    mptSetCommand({
+      issuanceId, local: opts.local, network: opts.network, seed: opts.seed,
+      lock: opts.lock, unlock: opts.unlock, holder: opts.holder,
+    }).catch(handleError);
+  });
+
+mpt
+  .command('info <issuanceId>')
+  .description('Show on-ledger details of an MPT issuance')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .action((issuanceId: string, opts: { local?: boolean; network: string }) => {
+    mptInfoCommand({ issuanceId, local: opts.local, network: opts.network })
+      .catch(handleError);
+  });
 
 /* ── Error handling ─────────────────────────────────────────────────────────── */
 function handleError(err: unknown): void {
