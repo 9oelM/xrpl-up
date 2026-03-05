@@ -422,11 +422,13 @@ xrpl-up channel fund ABC123... 5 --local --seed sSourceSeed...
 
 #### `xrpl-up channel sign <channelId> <amount>`
 
-Signs an off-chain claim authorizing the destination to claim up to `<amount>` XRP. No on-chain transaction — produces a hex signature that can be passed out-of-band.
+Signs an off-chain claim authorizing the destination to claim up to `<amount>` XRP. No on-chain transaction — prints the signature, the signer's public key, and ready-to-use `verify` and `claim` commands.
 
 ```bash
 xrpl-up channel sign ABC123... 3 --seed sSourceSeed...
 ```
+
+The output includes the `--public-key` value needed for `channel claim`. Pass the signature and public key to the destination out-of-band; the destination then runs the printed claim command.
 
 #### `xrpl-up channel verify <channelId> <amount> <signature> <publicKey>`
 
