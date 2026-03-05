@@ -50,8 +50,14 @@ xrpl-up run scripts/example-payment.ts
 # Create an AMM pool in one command
 xrpl-up amm create XRP USD --local
 
-# Query the pool
-xrpl-up amm info XRP USD.rIssuerAddress --local
+# Mint a transferable NFT
+xrpl-up nft mint --local --uri https://example.com/meta.json --transferable
+
+# Create an MPT issuance (Multi-Purpose Token)
+xrpl-up mpt create --local --max-amount 1000000 --asset-scale 6 --transferable
+
+# Open a payment channel
+xrpl-up channel create rDestination... 10 --local
 ```
 
 ---
@@ -99,7 +105,7 @@ xrpl-up node --network devnet
 
 > **Note:** The local node is a clean-room environment — ledger starts at index 1 with only the genesis wallet. It is not a mirror of mainnet state. What matters is that transaction validation rules match the rippled version in use.
 >
-> **AMM / XLS-30:** AMM is enabled by default in the local sandbox. xrpl-up uses the `[amendments]` section in `rippled.cfg` to force-enable `AMM` and its required dependency `fixUniversalNumber` at genesis creation. This works because the `[amendments]` stanza is applied when `--start` initializes the genesis ledger. No voting or ledger advancement is needed.
+> **AMM / XLS-30 and MPT / XLS-33:** Both AMM and MPT (Multi-Purpose Token) are enabled by default in the local sandbox. xrpl-up uses the `[amendments]` section in `rippled.cfg` to force-enable the required amendments at genesis creation. No voting or ledger advancement is needed.
 
 > **Hardware:** Standalone mode requires far less than a full rippled node. A typical developer laptop is sufficient (~2 GB RAM, ~500 MB disk for the Docker image). Standalone mode has no peers, no consensus, and no ledger sync — it only processes transactions you submit locally.
 
@@ -291,6 +297,237 @@ xrpl-up amm info XRP USD.rHb9... --network testnet
 ```
 
 Asset format: `XRP` for native currency, `CURRENCY.rIssuerAddress` for IOUs (e.g. `USD.rHb9CJ...`).
+
+---
+
+### `xrpl-up nft`
+
+NFT lifecycle operations (XLS-20). Supports mint, list, buy/sell offers, and burn on local sandbox or remote networks.
+
+#### `xrpl-up nft mint`
+
+Mints a new NFT. On `--local` a fresh wallet is auto-funded; on remote networks `--seed` is required.
+
+```bash
+# Mint a transferable NFT with a metadata URI (local, auto-funds wallet)
+xrpl-up nft mint --local --uri https://example.com/nft-meta.json --transferable
+
+# Mint with transfer fee and taxon on testnet
+xrpl-up nft mint --seed sn3nxiW7... --uri https://example.com/meta.json \
+  --transferable --transfer-fee 5 --taxon 42
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--uri <uri>` | — | Metadata URI (hex-encoded automatically) |
+| `--transferable` | off | Allow the NFT to be transferred (`tfTransferable`) |
+| `--burnable` | off | Allow the issuer to burn it (`tfBurnable`) |
+| `--taxon <n>` | `0` | NFToken taxon |
+| `--transfer-fee <pct>` | `0` | Royalty fee percentage, 0–50 |
+| `-s, --seed <seed>` | — | Minter wallet seed (omit to auto-fund on `--local`) |
+
+#### `xrpl-up nft list`
+
+Lists NFTs owned by an account.
+
+```bash
+# List NFTs for the first local account
+xrpl-up nft list --local
+
+# List NFTs for a specific address
+xrpl-up nft list --local --account rSomeAddress...
+```
+
+#### `xrpl-up nft offers <nftokenId>`
+
+Shows all open buy and sell offers for an NFT.
+
+```bash
+xrpl-up nft offers 000800006B9C0B... --local
+```
+
+#### `xrpl-up nft sell <nftokenId> <price>`
+
+Creates a sell offer for an NFT. Price is `"1"` for 1 XRP or `"10.USD.rIssuer"` for an IOU amount.
+
+```bash
+# Sell for 5 XRP
+xrpl-up nft sell 000800006B9C0B... 5 --local --seed sn3nxiW7...
+
+# Sell for 10 USD (IOU)
+xrpl-up nft sell 000800006B9C0B... 10.USD.rHb9CJA... --seed sn3nxiW7...
+```
+
+#### `xrpl-up nft accept <offerId>`
+
+Accepts a sell offer (or a buy offer with `--buy`). On `--local` a buyer wallet is auto-funded if `--seed` is omitted.
+
+```bash
+xrpl-up nft accept A1B2C3D4... --local
+
+# Accept with an explicit buyer seed
+xrpl-up nft accept A1B2C3D4... --local --seed sBuyerSeed...
+
+# Accept a buy offer
+xrpl-up nft accept A1B2C3D4... --local --seed sHolderSeed... --buy
+```
+
+#### `xrpl-up nft burn <nftokenId>`
+
+Permanently destroys an NFT.
+
+```bash
+xrpl-up nft burn 000800006B9C0B... --local --seed sHolderSeed...
+```
+
+---
+
+### `xrpl-up channel`
+
+Payment channel operations. Payment channels allow fast, off-chain micropayments with on-chain settlement.
+
+#### `xrpl-up channel create <destination> <amount>`
+
+Opens a payment channel funded with `<amount>` XRP. On `--local` the source wallet is auto-funded.
+
+```bash
+# Create a 10 XRP channel to a destination (local, auto-funds source)
+xrpl-up channel create rDestination... 10 --local
+
+# Create with a custom settle delay (1 hour)
+xrpl-up channel create rDestination... 10 --local --seed sSourceSeed... --settle-delay 3600
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--settle-delay <s>` | `86400` | Settlement delay in seconds (default: 1 day) |
+| `-s, --seed <seed>` | — | Source wallet seed (omit to auto-fund on `--local`) |
+
+#### `xrpl-up channel list`
+
+Lists payment channels for an account.
+
+```bash
+xrpl-up channel list --local
+xrpl-up channel list --local --account rSomeAddress...
+```
+
+#### `xrpl-up channel fund <channelId> <amount>`
+
+Adds more XRP to an existing channel.
+
+```bash
+xrpl-up channel fund ABC123... 5 --local --seed sSourceSeed...
+```
+
+#### `xrpl-up channel sign <channelId> <amount>`
+
+Signs an off-chain claim authorizing the destination to claim up to `<amount>` XRP. No on-chain transaction — produces a hex signature that can be passed out-of-band.
+
+```bash
+xrpl-up channel sign ABC123... 3 --seed sSourceSeed...
+```
+
+#### `xrpl-up channel verify <channelId> <amount> <signature> <publicKey>`
+
+Verifies an off-chain claim signature. Exits with code `1` if invalid.
+
+```bash
+xrpl-up channel verify ABC123... 3 <hex-signature> <public-key>
+```
+
+#### `xrpl-up channel claim <channelId>`
+
+Submits a `PaymentChannelClaim` on-chain. Optionally redeems an off-chain claim or closes the channel.
+
+```bash
+# Close the channel (no claim amount)
+xrpl-up channel claim ABC123... --local --seed sDestSeed... --close
+
+# Redeem an off-chain claim
+xrpl-up channel claim ABC123... --local --seed sDestSeed... \
+  --amount 3 --signature <hex-sig>
+```
+
+---
+
+### `xrpl-up mpt`
+
+Multi-Purpose Token (MPT / XLS-33) operations. MPT is enabled automatically in the local sandbox alongside AMM. Requires xrpl.js 4.1.0+ (included in xrpl-up).
+
+#### `xrpl-up mpt create`
+
+Creates a new MPT issuance. On `--local` the issuer wallet is auto-funded.
+
+```bash
+# Minimal transferable token (local, auto-funds wallet)
+xrpl-up mpt create --local --transferable
+
+# Full example with supply cap, decimals, fee, and metadata
+xrpl-up mpt create --local --seed sIssuerSeed... \
+  --max-amount 1000000 --asset-scale 6 \
+  --transfer-fee 100 --metadata "My Token v1" \
+  --transferable --can-clawback
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--max-amount <n>` | unlimited | Maximum token supply (integer string) |
+| `--asset-scale <n>` | `0` | Decimal places, 0–19 |
+| `--transfer-fee <n>` | `0` | Fee in hundredths of a percent, 0–50000 |
+| `--metadata <string>` | — | Metadata (UTF-8 string, hex-encoded on-chain) |
+| `--transferable` | off | Holders can transfer tokens (`tfMPTCanTransfer`) |
+| `--require-auth` | off | Issuer must authorize each holder (`tfMPTRequireAuth`) |
+| `--can-lock` | off | Issuer can lock individual holders (`tfMPTCanLock`) |
+| `--can-clawback` | off | Issuer can reclaim tokens from holders (`tfMPTCanClawback`) |
+| `-s, --seed <seed>` | — | Issuer seed (omit to auto-fund on `--local`) |
+
+#### `xrpl-up mpt destroy <issuanceId>`
+
+Destroys an MPT issuance. Outstanding supply must be zero.
+
+```bash
+xrpl-up mpt destroy 00070C4495F14B0E... --local --seed sIssuerSeed...
+```
+
+#### `xrpl-up mpt authorize <issuanceId>`
+
+Authorizes (or unauthorizes) a holder to hold the token. Required when the issuance was created with `--require-auth`.
+
+```bash
+# Issuer side: authorize a holder
+xrpl-up mpt authorize 00070C44... --local --seed sIssuerSeed... --holder rHolderAddress...
+
+# Holder side: opt in (no --holder flag)
+xrpl-up mpt authorize 00070C44... --local --seed sHolderSeed...
+
+# Revoke authorization
+xrpl-up mpt authorize 00070C44... --local --seed sIssuerSeed... \
+  --holder rHolderAddress... --unauthorize
+```
+
+#### `xrpl-up mpt set <issuanceId>`
+
+Locks or unlocks an MPT issuance (or a specific holder's balance). Requires the issuance to have been created with `--can-lock`.
+
+```bash
+# Lock the entire issuance
+xrpl-up mpt set 00070C44... --local --seed sIssuerSeed... --lock
+
+# Lock a specific holder
+xrpl-up mpt set 00070C44... --local --seed sIssuerSeed... --lock --holder rHolderAddress...
+
+# Unlock
+xrpl-up mpt set 00070C44... --local --seed sIssuerSeed... --unlock
+```
+
+#### `xrpl-up mpt info <issuanceId>`
+
+Shows on-ledger details of an MPT issuance: issuer, outstanding supply, flags, and metadata.
+
+```bash
+xrpl-up mpt info 00070C4495F14B0E... --local
+```
 
 ---
 
