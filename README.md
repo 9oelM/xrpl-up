@@ -1,0 +1,512 @@
+# xrpl-up
+
+A Hardhat-inspired CLI for the XRP Ledger. Spin up a local XRPL sandbox with pre-funded accounts, run scripts against any network, and interact with testnet/devnet — all from one command.
+
+## Prerequisites
+
+- **Node.js** v18 or later
+- **Docker Desktop** (required for `--local` mode only)
+
+## Installation
+
+```bash
+npm install -g hardhat-xrpl
+```
+
+Or use locally inside a project:
+
+```bash
+npm install hardhat-xrpl
+npx xrpl-up --help
+```
+
+## Quick Start
+
+```bash
+# Scaffold a new project (select "local" as default network)
+xrpl-up init my-project
+cd my-project && npm install
+
+# Start a local sandbox with 10 pre-funded accounts
+xrpl-up node --local
+
+# In another terminal — list accounts with live balances
+xrpl-up accounts --local
+
+# Run a script against the local sandbox
+xrpl-up run scripts/example-payment.ts
+
+# Create an AMM pool in one command
+xrpl-up amm create XRP USD --local
+
+# Query the pool
+xrpl-up amm info XRP USD.rIssuerAddress --local
+```
+
+---
+
+## Commands
+
+### `xrpl-up node`
+
+Starts a sandbox environment and funds accounts. Supports a fully local rippled node (via Docker) or a connection to XRPL Testnet/Devnet.
+
+```bash
+# Local Docker sandbox (recommended)
+xrpl-up node --local
+
+# Connect to Testnet
+xrpl-up node --network testnet
+
+# Connect to Devnet
+xrpl-up node --network devnet
+```
+
+**Local mode options:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--local` | — | Run a local rippled node via Docker |
+| `--image <image>` | `xrpllabsofficial/xrpld:latest` | rippled Docker image |
+| `--persist` | off | Keep ledger state and accounts across restarts |
+| `--ledger-interval <ms>` | `1000` | Auto-advance ledger every N milliseconds |
+| `--no-auto-advance` | — | Disable automatic ledger closing |
+| `--no-secrets` | — | Suppress seeds and private keys from stdout (auto-enabled with `--detach`) |
+| `--debug` | — | Enable rippled debug logging |
+| `--detach` | — | Start in background and exit (for CI/CD) |
+| `--config <path>` | — | Use a custom `rippled.cfg` instead of the auto-generated one |
+| `-a, --accounts <n>` | `10` | Number of accounts to pre-fund |
+
+**What `xrpl-up node --local` does:**
+
+1. Generates `rippled.cfg` and `docker-compose.yml` in `~/.xrpl-up/`
+2. Starts rippled in standalone mode (no peers, no sync, no internet required)
+3. Starts a faucet server alongside rippled
+4. Funds 10 accounts with 1,000 XRP each from the genesis wallet
+5. Auto-advances the ledger every second so transactions confirm automatically
+6. Prints all account addresses and seeds to the terminal
+
+> **Note:** The local node is a clean-room environment — ledger starts at index 1 with only the genesis wallet. It is not a mirror of mainnet state. What matters is that transaction validation rules match the rippled version in use.
+>
+> **AMM / XLS-30:** AMM is enabled by default in the local sandbox. xrpl-up uses the `[amendments]` section in `rippled.cfg` to force-enable `AMM` and its required dependency `fixUniversalNumber` at genesis creation. This works because the `[amendments]` stanza is applied when `--start` initializes the genesis ledger. No voting or ledger advancement is needed.
+
+> **Hardware:** Standalone mode requires far less than a full rippled node. A typical developer laptop is sufficient (~2 GB RAM, ~500 MB disk for the Docker image). Standalone mode has no peers, no consensus, and no ledger sync — it only processes transactions you submit locally.
+
+---
+
+### `xrpl-up stop`
+
+Stops the local Docker sandbox stack.
+
+```bash
+xrpl-up stop
+```
+
+---
+
+### `xrpl-up reset`
+
+Wipes all local sandbox state and starts with a clean slate. Useful after a `--persist` session or when you want to discard all ledger state and funded accounts.
+
+```bash
+# Wipe containers, ledger volume, and accounts — keep snapshots
+xrpl-up reset
+
+# Wipe everything including saved snapshots
+xrpl-up reset --snapshots
+```
+
+What `xrpl-up reset` removes:
+- Running Docker containers (`docker compose down`)
+- The persist ledger volume (`xrpl-up-local-db`)
+- `~/.xrpl-up/local-accounts.json`
+- With `--snapshots`: `~/.xrpl-up/snapshots/` and all snapshot files
+
+> Snapshots are kept by default since they are the only way to recover a previous state. Use `--snapshots` only when you want a complete wipe.
+
+---
+
+### `xrpl-up accounts`
+
+Lists funded accounts with their live XRP balances.
+
+```bash
+xrpl-up accounts --local
+xrpl-up accounts --network testnet
+
+# Query any address directly
+xrpl-up accounts --local --address rSomeAddress...
+```
+
+---
+
+### `xrpl-up faucet`
+
+Funds a new or existing account via the local sandbox faucet or a public testnet/devnet faucet. Funded accounts are automatically saved to `~/.xrpl-up/{network}-accounts.json` so they appear in `xrpl-up accounts`.
+
+```bash
+# Generate and fund a new wallet on the local sandbox
+xrpl-up faucet --network local
+
+# Fund an existing wallet by seed on the local sandbox
+xrpl-up faucet --network local --seed sn3nxiW7v8KXzPzAqzyHXbSSKNuN9
+
+# Use the public Testnet faucet
+xrpl-up faucet --network testnet
+```
+
+> `--local` is accepted as a backward-compatible alias for `--network local`.
+> Faucet is not available on Mainnet.
+
+---
+
+### `xrpl-up status`
+
+Shows rippled server info and faucet health.
+
+```bash
+xrpl-up status --local
+xrpl-up status --network testnet
+```
+
+Displays rippled version, current ledger index, and faucet availability.
+
+---
+
+### `xrpl-up run <script>`
+
+Runs a TypeScript or JavaScript script with the network URL injected as environment variables. TypeScript is executed directly via `tsx` (no build step needed).
+
+```bash
+xrpl-up run scripts/example-payment.ts --network local
+xrpl-up run scripts/my-script.js --network testnet
+```
+
+**Injected environment variables:**
+
+| Variable | Description |
+|----------|-------------|
+| `XRPL_NETWORK` | Network key (e.g. `local`, `testnet`) |
+| `XRPL_NETWORK_URL` | WebSocket URL (e.g. `ws://localhost:6006`) |
+| `XRPL_NETWORK_NAME` | Human-readable name |
+
+**Example script:**
+
+```ts
+// scripts/send-payment.ts
+import { Client, xrpToDrops, Wallet } from 'xrpl';
+
+async function main() {
+  const client = new Client(process.env.XRPL_NETWORK_URL!);
+  await client.connect();
+
+  const sender = Wallet.fromSeed('sn3nxiW7v8KXzPzAqzyHXbSSKNuN9'); // from xrpl-up accounts --local
+
+  await client.submitAndWait(
+    {
+      TransactionType: 'Payment',
+      Account: sender.address,
+      Amount: xrpToDrops('10'),
+      Destination: 'rDestinationAddress...',
+    },
+    { wallet: sender }
+  );
+
+  console.log('Payment sent!');
+  await client.disconnect();
+}
+
+main().catch(console.error);
+```
+
+---
+
+### `xrpl-up logs`
+
+Streams Docker Compose logs from the running local sandbox.
+
+```bash
+xrpl-up logs           # all services
+xrpl-up logs rippled   # rippled only (useful with --debug)
+xrpl-up logs faucet    # faucet server only
+```
+
+---
+
+### `xrpl-up amm`
+
+Manage AMM pools (XLS-30). AMM is enabled by default in the local sandbox — no extra configuration needed.
+
+#### `xrpl-up amm create <asset1> <asset2>`
+
+Creates a ready-to-use AMM pool with fresh funded accounts. Automatically handles issuer creation, trust lines, token issuance, and pool creation.
+
+```bash
+# XRP/USD pool with defaults (100 XRP, 100 USD, 0.5% fee)
+xrpl-up amm create XRP USD --local
+
+# Custom amounts and fee
+xrpl-up amm create XRP USD --amount1 500 --amount2 1000 --fee 0.3 --local
+
+# IOU/IOU pool (creates two separate issuers)
+xrpl-up amm create USD EUR --amount1 100 --amount2 100 --local
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--amount1 <n>` | `100` | Amount of asset1 to deposit |
+| `--amount2 <n>` | `100` | Amount of asset2 to deposit |
+| `--fee <pct>` | `0.5` | Trading fee in % (max 1%) |
+| `--local` | — | Use the local Docker sandbox |
+| `-n, --network` | `testnet` | Target network |
+
+The command prints the exact `amm info` query to use afterward, with the issuer address filled in.
+
+> **Note:** For non-XRP assets, `amm create` mints a fresh token on your local ledger. The issuer address is randomly generated — it has no relation to any real-world or testnet issuer.
+
+#### `xrpl-up amm info <asset1> <asset2>`
+
+Shows current pool state: reserves, LP token supply, trading fee, and AMM account.
+
+```bash
+# Query by asset pair (use the issuer address printed by amm create)
+xrpl-up amm info XRP USD.rIssuerAddress --local
+
+# Query by AMM account address
+xrpl-up amm info --account rAMMAccountAddress --local
+
+# Query on testnet
+xrpl-up amm info XRP USD.rHb9... --network testnet
+```
+
+Asset format: `XRP` for native currency, `CURRENCY.rIssuerAddress` for IOUs (e.g. `USD.rHb9CJ...`).
+
+---
+
+### `xrpl-up init [directory]`
+
+Scaffolds a new project with config, TypeScript setup, and example scripts. Prompts for a default network — choose `local` to get local-sandbox-ready scripts out of the box.
+
+```bash
+xrpl-up init
+xrpl-up init my-project
+```
+
+**Generated files:**
+
+```
+my-project/
+├── xrpl-up.config.js          # Network configuration (all 4 networks pre-configured)
+├── package.json
+├── tsconfig.json
+├── .gitignore
+└── scripts/
+    ├── example-payment.ts     # Send XRP between two accounts
+    ├── example-nft.ts         # Mint an NFT
+    └── example-amm.ts         # Create an AMM pool and trade (local only)
+```
+
+When `local` is selected as the default network, the example scripts use the local faucet (`http://localhost:3001`) instead of `client.fundWallet()`. `example-amm.ts` is only scaffolded for local mode since AMM is enabled by default there.
+
+---
+
+### `xrpl-up snapshot`
+
+Save and restore ledger state checkpoints. Useful for complex test setups (AMM pools, issued currencies, multi-step escrows) where re-running setup from scratch is expensive.
+
+> **Requires `--persist` mode.** Snapshots copy the named Docker volume (`xrpl-up-local-db`). In ephemeral mode (default), there is no persistent volume to snapshot.
+
+```bash
+# Save the current ledger state
+xrpl-up snapshot save before-amm
+
+# List saved snapshots
+xrpl-up snapshot list
+
+# Restore to a previous checkpoint (~5–10s: rippled + faucet stop, volume restored, both restart)
+xrpl-up snapshot restore before-amm
+```
+
+Each snapshot saves both the ledger volume **and** the account store (`local-accounts.json`), so `xrpl-up accounts` reflects the correct set of accounts after a restore. The `snapshot list` output shows `+accounts` for any snapshot that includes the account sidecar.
+
+**Typical workflow:**
+
+```bash
+xrpl-up node --local --persist --detach
+
+# Run expensive setup (fund accounts, create AMM pool, set trust lines...)
+xrpl-up faucet --network local
+xrpl-up snapshot save after-setup
+
+# Run tests, mutate state...
+
+# Roll back to known-good state and run again
+xrpl-up snapshot restore after-setup
+xrpl-up accounts --local    # shows accounts as of snapshot time
+```
+
+**Fresh start from a snapshot after reset:**
+
+```bash
+xrpl-up reset                                    # wipe everything
+xrpl-up node --local --persist --detach          # start sandbox (creates new volume)
+xrpl-up snapshot restore after-setup             # restore saved state
+xrpl-up accounts --local                         # snapshot accounts restored
+```
+
+Snapshots are stored at `~/.xrpl-up/snapshots/`. Each snapshot is a pair of files:
+- `<name>.tar.gz` — compressed NuDB ledger volume (typically 5–100 MB)
+- `<name>-accounts.json` — account store at snapshot time
+
+---
+
+### `xrpl-up config`
+
+Manage and validate rippled configuration.
+
+#### `xrpl-up config export`
+
+Prints the auto-generated `rippled.cfg` to stdout, or writes it to a file. Use this as a starting point for a custom config.
+
+```bash
+# Print to stdout
+xrpl-up config export
+
+# Save to file
+xrpl-up config export --output my-rippled.cfg
+
+# Export with debug log level
+xrpl-up config export --debug --output my-rippled.cfg
+```
+
+#### `xrpl-up config validate <file>`
+
+Validates a `rippled.cfg` for compatibility with xrpl-up before you use it. Checks for blocking errors, warnings, and prints recommendations.
+
+```bash
+xrpl-up config validate my-rippled.cfg
+```
+
+**What is checked:**
+
+| Severity | Check |
+|----------|-------|
+| Error | WebSocket port must be `6006` (hardcoded by xrpl-up) |
+| Error | WebSocket `ip` must be `0.0.0.0` (faucet container access) |
+| Error | WebSocket `admin` must include `0.0.0.0` (admin commands) |
+| Error | `[ssl_verify]` must be `0` |
+| Error | `[node_db]` and `[database_path]` must be present |
+| Warning | `node_size = large/huge` risks OOM on developer laptops |
+| Warning | `send_queue_limit < 100` may throttle heavy test suites |
+| Recommendation | Add `send_queue_limit = 500` for AMM testing |
+
+Exit code `1` if any errors are found, `0` otherwise.
+
+**Custom config workflow:**
+
+```bash
+# 1. Export the default as a starting point
+xrpl-up config export --output my-rippled.cfg
+
+# 2. Edit — e.g. change node_size, send_queue_limit, log level
+$EDITOR my-rippled.cfg
+
+# 3. Validate before starting
+xrpl-up config validate my-rippled.cfg
+
+# 4. Start with the custom config
+xrpl-up node --local --config my-rippled.cfg
+```
+
+Validation also runs automatically when `--config` is passed to `xrpl-up node --local` — the node will not start if there are blocking errors.
+
+---
+
+## CI/CD
+
+Use `--detach` to start the sandbox non-interactively and `xrpl-up stop` to tear it down after tests.
+
+```yaml
+# .github/workflows/test.yml
+steps:
+  - run: xrpl-up node --local --detach
+  - run: npm test
+  - run: xrpl-up stop
+    if: always()
+```
+
+Docker is available on all GitHub-hosted runners (`ubuntu-latest`, `macos-latest`). The faucet server handles ledger auto-advance while the sandbox runs in the background.
+
+---
+
+## Configuration
+
+`xrpl-up.config.js` in your project root defines named networks used by all commands:
+
+```js
+module.exports = {
+  networks: {
+    local: {
+      url: 'ws://localhost:6006',
+      name: 'Local rippled (Docker)',
+    },
+    testnet: {
+      url: 'wss://s.altnet.rippletest.net:51233',
+      name: 'XRPL Testnet',
+    },
+    devnet: {
+      url: 'wss://s.devnet.rippletest.net:51233',
+      name: 'XRPL Devnet',
+    },
+    mainnet: {
+      url: 'wss://xrplcluster.com',
+      name: 'XRPL Mainnet',
+    },
+  },
+  defaultNetwork: 'local',
+};
+```
+
+Add any custom WebSocket endpoint as a named network and use it with `--network <name>`.
+
+---
+
+## Supported Networks
+
+| Key | Endpoint | Faucet |
+|-----|----------|--------|
+| `local` | `ws://localhost:6006` | Yes (genesis wallet, no limits) |
+| `testnet` | `wss://s.altnet.rippletest.net:51233` | Yes (rate limited) |
+| `devnet` | `wss://s.devnet.rippletest.net:51233` | Yes (rate limited) |
+| `mainnet` | `wss://xrplcluster.com` | No |
+
+> **Local vs Testnet:** The local sandbox is designed to cover most development workflows without needing testnet. Local mode has no transaction throttling, no faucet rate limits, instant ledger closes, and full reset control. Use testnet for final validation against real network state.
+
+---
+
+## Data Storage
+
+Account seeds, generated configs, and snapshots are stored at:
+
+```
+~/.xrpl-up/
+  local-accounts.json         # funded account seeds (local mode)
+  testnet-accounts.json       # funded account seeds (testnet)
+  devnet-accounts.json        # funded account seeds (devnet)
+  docker-compose.yml          # generated on each node start
+  rippled.cfg                 # generated on each node start (or custom via --config)
+  snapshots/
+    before-amm.tar.gz         # ledger volume snapshot (--persist mode)
+    before-amm-accounts.json  # account store at snapshot time
+    after-setup.tar.gz
+    after-setup-accounts.json
+```
+
+`xrpl-up node` always recreates accounts fresh unless `--persist` is used. `xrpl-up faucet` appends to the account store regardless of persist mode. `xrpl-up reset` clears the account store and Docker volume in one command.
+
+---
+
+## License
+
+MIT
+# xrpl-up
