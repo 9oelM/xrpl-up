@@ -81,8 +81,6 @@ should use `xrpl.js` directly or call `rippled` RPC endpoints.
 
 ### Example Workflow
 
-This is the intended “daily driver” loop:
-
 1. Start local sandbox: `xrpl-up node --local --persist --detach`
 2. Do expensive setup once (AMM pool, issuers, trust lines): `xrpl-up amm create ... --local`
 3. Save a checkpoint: `xrpl-up snapshot save after-setup`
