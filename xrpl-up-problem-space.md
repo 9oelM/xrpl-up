@@ -23,7 +23,7 @@ Immediate Targets:
 - Deterministic local execution controls: auto-ledger-advance, configurable cadence, persistent state
 - State management: snapshot save/restore/list, rollback-friendly workflows, account-store consistency
 - Developer scripting workflow: project scaffolding, script runner, named networks, local/remote faucet flows
-- AMM workflow acceleration: pool auto-provision, pool inspection, reusable prepared states
+- RPC workflow wrappers for common XRPL use cases (AMM, NFT, Channels, MPT, etc.): pool auto-provision/inspection, guided transaction flows, and reusable prepared states
 - CI/CD workflow: detached startup, deterministic teardown, machine-friendly execution patterns
 
 Target feature set (roadmap):
@@ -260,7 +260,7 @@ xrpl-up reset --snapshots  # also delete all saved snapshots
 
 ---
 
-## Roadmap (Not Yet Implemented)
+## Roadmap (To Be Discussed)
 
 ### Amendment Control
 
