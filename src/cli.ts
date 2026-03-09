@@ -22,7 +22,7 @@ import {
 } from './commands/channel';
 import {
   mptCreateCommand, mptDestroyCommand, mptAuthorizeCommand,
-  mptSetCommand, mptInfoCommand,
+  mptSetCommand, mptInfoCommand, mptPayCommand, mptListCommand,
 } from './commands/mpt';
 import {
   offerCreateCommand, offerCancelCommand, offerListCommand,
@@ -601,6 +601,32 @@ mpt
   .option('-n, --network <network>', 'Network', 'testnet')
   .action((issuanceId: string, opts: { local?: boolean; network: string }) => {
     mptInfoCommand({ issuanceId, local: opts.local, network: opts.network })
+      .catch(handleError);
+  });
+
+mpt
+  .command('pay <issuanceId> <amount> <destination>')
+  .description('Send MPT tokens to a destination address')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .requiredOption('-s, --seed <seed>', 'Sender wallet seed')
+  .action((issuanceId: string, amount: string, destination: string, opts: {
+    local?: boolean; network: string; seed: string;
+  }) => {
+    mptPayCommand({ issuanceId, amount, destination, seed: opts.seed, local: opts.local, network: opts.network })
+      .catch(handleError);
+  });
+
+mpt
+  .command('list [account]')
+  .description('List MPT issuances created by an account (use --holdings to list tokens held)')
+  .option('--local', 'Use the local Docker sandbox')
+  .option('-n, --network <network>', 'Network', 'testnet')
+  .option('--holdings', 'List MPT token balances held by the account instead of issuances created')
+  .action((account: string | undefined, opts: {
+    local?: boolean; network: string; holdings?: boolean;
+  }) => {
+    mptListCommand({ account, holdings: opts.holdings, local: opts.local, network: opts.network })
       .catch(handleError);
   });
 

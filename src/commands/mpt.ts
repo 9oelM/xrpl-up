@@ -135,8 +135,11 @@ export async function mptCreateCommand(options: MptCreateOptions): Promise<void>
 
     if (issuanceId) {
       const net = isLocal ? ' --local' : '';
-      logger.dim(`  Info:    xrpl-up mpt info ${issuanceId}${net}`);
-      logger.dim(`  Destroy: xrpl-up mpt destroy ${issuanceId}${net} --seed <seed>`);
+      logger.dim(`  Authorize: xrpl-up mpt authorize ${issuanceId}${net} --seed <holder-seed>`);
+      logger.dim(`  Send:      xrpl-up mpt pay ${issuanceId} <amount> <dest>${net} --seed <seed>`);
+      logger.dim(`  Info:      xrpl-up mpt info ${issuanceId}${net}`);
+      logger.dim(`  List:      xrpl-up mpt list${net}`);
+      logger.dim(`  Destroy:   xrpl-up mpt destroy ${issuanceId}${net} --seed <seed>`);
       logger.blank();
     }
   } catch (err: unknown) {
@@ -319,6 +322,188 @@ export async function mptSetCommand(options: MptSetOptions): Promise<void> {
   } catch (err: unknown) {
     await manager.disconnect().catch(() => {});
     spinner.fail('Failed to set MPT issuance state');
+    logger.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+}
+
+// ── mpt pay ───────────────────────────────────────────────────────────────────
+
+export interface MptPayOptions {
+  issuanceId: string;
+  amount: string;
+  destination: string;
+  seed: string;
+  local?: boolean;
+  network?: string;
+}
+
+export async function mptPayCommand(options: MptPayOptions): Promise<void> {
+  if (!options.seed) {
+    logger.error('--seed <seed> is required');
+    process.exit(1);
+  }
+
+  const { networkName, networkConfig } = resolveNetworkInfo(options);
+  const manager = new NetworkManager(networkName, networkConfig);
+  const wallet  = Wallet.fromSeed(options.seed);
+
+  const spinner = ora({
+    text: `Sending ${options.amount} MPT to ${chalk.cyan(options.destination)} on ${chalk.cyan(manager.displayName)}…`,
+    color: 'cyan',
+    indent: 2,
+  }).start();
+
+  try {
+    await manager.connect();
+
+    const tx = {
+      TransactionType: 'Payment',
+      Account: wallet.address,
+      Destination: options.destination,
+      Amount: { mpt_issuance_id: options.issuanceId, value: options.amount },
+    };
+
+    spinner.text = 'Submitting Payment…';
+    const prepared = await manager.client.autofill(tx as any);
+    const signed   = wallet.sign(prepared as any);
+    const result   = await manager.client.submitAndWait(signed.tx_blob);
+    await manager.disconnect();
+
+    const meta    = (result.result as any).meta as any;
+    const outcome = meta?.TransactionResult ?? '—';
+
+    if (outcome === 'tesSUCCESS') {
+      spinner.succeed(chalk.green(`Sent ${options.amount} MPT`));
+    } else {
+      spinner.fail(`Payment failed: ${outcome}`);
+      process.exit(1);
+    }
+    logger.blank();
+
+    const pad = (s: string, n: number) => s + ' '.repeat(Math.max(0, n - s.length));
+    const W   = 16;
+    const row = (key: string, val: string) =>
+      logger.log(`${chalk.dim(pad(key + ':', W))} ${val}`);
+
+    row('From',        chalk.dim(wallet.address));
+    row('To',          chalk.dim(options.destination));
+    row('Amount',      chalk.green(options.amount));
+    row('Issuance ID', chalk.cyan(options.issuanceId));
+    logger.blank();
+  } catch (err: unknown) {
+    await manager.disconnect().catch(() => {});
+    spinner.fail('Failed to send MPT');
+    logger.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+}
+
+// ── mpt list ──────────────────────────────────────────────────────────────────
+
+export interface MptListOptions {
+  account?: string;
+  holdings?: boolean;   // list tokens held; default: list issuances created
+  local?: boolean;
+  network?: string;
+}
+
+export async function mptListCommand(options: MptListOptions): Promise<void> {
+  const { networkName, networkConfig, isLocal } = resolveNetworkInfo(options);
+  const manager = new NetworkManager(networkName, networkConfig);
+  const mode    = options.holdings ? 'holdings' : 'issuances';
+
+  const spinner = ora({
+    text: `Fetching MPT ${mode} on ${chalk.cyan(manager.displayName)}…`,
+    color: 'cyan',
+    indent: 2,
+  }).start();
+
+  try {
+    let address = options.account;
+    if (!address) {
+      const store    = new WalletStore(networkName);
+      const accounts = store.all();
+      if (accounts.length === 0) {
+        spinner.fail('No accounts found');
+        if (isLocal) {
+          logger.warning('Run xrpl-up node --local first to populate the local account store.');
+        } else {
+          logger.warning(`Pass an account address: xrpl-up mpt list <address> --network ${networkName}`);
+        }
+        process.exit(1);
+      }
+      address = accounts[0].address;
+    }
+
+    const type = options.holdings ? 'mptoken' : 'mpt_issuance';
+    await manager.connect();
+    const res = await manager.client.request({
+      command: 'account_objects',
+      account: address,
+      type,
+      ledger_index: 'current',
+    } as any);
+    await manager.disconnect();
+
+    const entries = (res.result as any).account_objects as any[];
+
+    if (options.holdings) {
+      spinner.succeed(
+        `${entries.length} MPT holding${entries.length === 1 ? '' : 's'} for ${chalk.dim(address)}`
+      );
+    } else {
+      spinner.succeed(
+        `${entries.length} MPT issuance${entries.length === 1 ? '' : 's'} for ${chalk.dim(address)}`
+      );
+    }
+    logger.blank();
+
+    if (entries.length === 0) {
+      logger.dim(options.holdings
+        ? '  No MPT holdings found. Opt in with: xrpl-up mpt authorize <issuanceId> --seed <seed>'
+        : '  No MPT issuances found. Create one with: xrpl-up mpt create --transferable --local',
+      );
+      logger.blank();
+      return;
+    }
+
+    const pad = (s: string, n: number) => s + ' '.repeat(Math.max(0, n - s.length));
+    const W   = 18;
+    const row = (key: string, val: string) =>
+      logger.log(`${chalk.dim(pad(key + ':', W))} ${val}`);
+
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      if (i > 0) logger.blank();
+
+      if (options.holdings) {
+        // MPToken object: fields MPTokenIssuanceID, MPTAmount
+        row('Issuance ID', chalk.cyan(e.MPTokenIssuanceID ?? '—'));
+        row('Balance',     chalk.green(String(e.MPTAmount ?? '0')));
+        const locked = (e.Flags ?? 0) & 0x0001;
+        if (locked) row('Locked',      chalk.yellow('yes'));
+      } else {
+        // MPTokenIssuance object: LedgerIndex IS the issuance ID
+        const issuanceId = (e.index ?? e.LedgerIndex ?? '—') as string;
+        row('Issuance ID',   chalk.cyan(issuanceId));
+        if (e.MaximumAmount    != null) row('Max amount',    chalk.dim(String(e.MaximumAmount)));
+        if (e.OutstandingAmount != null) row('Outstanding',   chalk.green(String(e.OutstandingAmount)));
+        if (e.AssetScale       != null) row('Asset scale',   chalk.dim(String(e.AssetScale)));
+        if (e.TransferFee      != null) row('Transfer fee',  chalk.dim(String(e.TransferFee)));
+        const f      = e.Flags ?? 0;
+        const flags: string[] = [];
+        if (f & 0x0002) flags.push('CanLock');
+        if (f & 0x0004) flags.push('RequireAuth');
+        if (f & 0x0020) flags.push('CanTransfer');
+        if (f & 0x0040) flags.push('CanClawback');
+        if (flags.length) row('Flags', chalk.dim(flags.join(', ')));
+      }
+    }
+    logger.blank();
+  } catch (err: unknown) {
+    await manager.disconnect().catch(() => {});
+    spinner.fail(`Failed to list MPT ${mode}`);
     logger.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
   }

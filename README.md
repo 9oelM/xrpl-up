@@ -533,6 +533,27 @@ Shows on-ledger details of an MPT issuance: issuer, outstanding supply, flags, a
 xrpl-up mpt info 00070C4495F14B0E... --local
 ```
 
+#### `xrpl-up mpt pay <issuanceId> <amount> <destination>`
+
+Sends MPT tokens from the `--seed` wallet to `<destination>`. The destination must have already opted in via `mpt authorize`.
+
+```bash
+xrpl-up mpt pay 00070C44... 500 rDestAddress... --local --seed sHolderSeed...
+```
+
+#### `xrpl-up mpt list [account]`
+
+Lists MPT issuances **created** by an account (default), or MPT token balances **held** by an account (`--holdings`). Defaults to the first account in the local wallet store if no address is given.
+
+```bash
+# List issuances you created
+xrpl-up mpt list --local
+
+# List MPT balances held by an account
+xrpl-up mpt list --local --holdings
+xrpl-up mpt list rAddress... --network testnet --holdings
+```
+
 ---
 
 ### `xrpl-up offer`
@@ -883,6 +904,8 @@ xrpl-up clawback mpt 00000001AABBCCDD... rHolder... 500 --local --seed sIssuerSe
 
 Scaffolds a new project with config, TypeScript setup, and example scripts. Prompts for a default network; choose `local` for local-sandbox-ready scripts out of the box.
 
+> **Prerequisite:** `xrpl-up` must be installed globally (`npm install -g xrpl-up`). The generated `package.json` scripts (`npm run node`, `npm run accounts`) call `xrpl-up` from PATH and do not re-install it locally.
+
 ```bash
 xrpl-up init
 xrpl-up init my-project
@@ -897,12 +920,15 @@ my-project/
 ├── tsconfig.json
 ├── .gitignore
 └── scripts/
-    ├── example-payment.ts     # Send XRP between two accounts
-    ├── example-nft.ts         # Mint an NFT
-    └── example-amm.ts         # Create an AMM pool and trade (local only)
+    ├── example-payment.ts     # Send XRP + verify sender/receiver balances
+    ├── example-token.ts       # Issue a custom IOU token (DefaultRipple + TrustSet + Payment)
+    ├── example-dex.ts         # Place a DEX order, list it, cancel it (⚠ needs counterparty to fill)
+    ├── example-nft.ts         # Full NFT lifecycle: mint → sell offer → accept → burn
+    ├── example-mpt.ts         # Issue a Multi-Purpose Token: create issuance → opt in → transfer
+    └── example-amm.ts         # Create an AMM pool and execute a swap (local only)
 ```
 
-When `local` is selected as the default network, the example scripts use the local faucet (`http://localhost:3001`) instead of `client.fundWallet()`. `example-amm.ts` is only scaffolded for local mode since AMM is enabled by default there.
+When `local` is selected as the default network, the example scripts use the local faucet (`http://localhost:3001`) instead of `client.fundWallet()`. `example-amm.ts` is only scaffolded for local mode since AMM is enabled by default there. The local `example-dex.ts` controls both sides of the trade so the order fills immediately; the remote variant places the order, lists it, then cancels it with a note that a real counterparty is required for fills.
 
 ---
 

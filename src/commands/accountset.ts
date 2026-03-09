@@ -32,6 +32,8 @@ const ROOT_FLAGS: Array<[number, string]> = [
   [0x00400000, 'PasswordSpent'],
   [0x00200000, 'GlobalFreeze'],
   [0x00000100, 'NoFreeze'],
+  // 0x80000000 is bit 31; JS bitwise ops use signed 32-bit ints so the result is truthy when set
+  [0x80000000, 'AllowTrustLineClawback'],
 ];
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
