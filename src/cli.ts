@@ -137,6 +137,10 @@ program
     '--config <path>',
     'Path to a custom rippled.cfg — skips auto-generation (local mode only)'
   )
+  .option(
+    '--exit-on-crash',
+    'Bypass the wrapper entrypoint so the container exits with rippled\'s code when it crashes (useful for observing exit code 134 on SIGABRT)'
+  )
   .action((opts: {
     network: string;
     accounts?: string;
@@ -153,6 +157,7 @@ program
     debug?: boolean;
     detach?: boolean;
     secrets?: boolean;
+    exitOnCrash?: boolean;
     config?: string;
   }) => {
     nodeCommand({
@@ -171,6 +176,7 @@ program
       noSecrets: opts.secrets === false,
       debug: opts.debug,
       detach: opts.detach,
+      noRestart: opts.exitOnCrash,
       config: opts.config,
     }).catch(handleError);
   });

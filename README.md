@@ -93,6 +93,7 @@ xrpl-up node --network devnet
 | `--debug` | — | Enable rippled debug logging |
 | `--detach` | — | Start in background and exit (for CI/CD) |
 | `--config <path>` | — | Use a custom `rippled.cfg` instead of the auto-generated one |
+| `--exit-on-crash` | — | Exit with code 134 when rippled crashes (SIGABRT); disables container auto-restart |
 | `-a, --accounts <n>` | `10` | Number of accounts to pre-fund |
 
 **What `xrpl-up node --local` does:**

@@ -16,6 +16,7 @@ import {
   DEFAULT_IMAGE,
   LOCAL_WS_URL,
   FAUCET_URL,
+  COMPOSE_PROJECT,
 } from '../core/compose';
 import { validateConfig, printValidationResult } from './config';
 import { GENESIS_ADDRESS } from '../core/standalone';
@@ -38,6 +39,7 @@ export interface NodeOptions {
   noSecrets?: boolean;  // suppress private key output (auto-enabled with --detach)
   debug?: boolean;
   detach?: boolean;
+  noRestart?: boolean;  // bypass wrapper entrypoint so container exits with rippled's code
   config?: string;  // path to a custom rippled.cfg (local mode only)
 }
 
@@ -186,10 +188,68 @@ export async function nodeCommand(options: NodeOptions = {}): Promise<void> {
       }
 
       const ledgerIntervalMs = options.detach ? (options.ledgerInterval ?? 1000) : 0;
-      await composeUp(image, persist, options.debug ?? false, ledgerIntervalMs, options.config);
+      await composeUp(image, persist, options.debug ?? false, ledgerIntervalMs, options.config, options.noRestart ?? false);
       dockerSpinner.succeed(
         `Local stack started  ${chalk.dim('rippled ws://localhost:6006')}  ${chalk.dim('faucet http://localhost:3001')}`
       );
+
+      // When --exit-on-crash is set, attach two background watchers:
+      //
+      // 1. Log poller  — polls `docker logs` every 500 ms looking for the
+      //    "Logic error:" line that rippled always emits before abort().
+      //    When detected it sends SIGABRT *directly to rippled's own PID*
+      //    (not via `docker kill`, which targets PID 1) using `docker exec kill -6`.
+      //    This is necessary because glibc's abort() uses tgkill() (thread-targeted)
+      //    which under Rosetta 2 / Docker Desktop on Apple Silicon does not reliably
+      //    deliver the signal.  Sending via `kill(rippled_pid, SIGABRT)` from
+      //    another process bypasses that issue.
+      //
+      // 2. docker wait  — blocks until the container exits and reports the code.
+      //    Exit 134 = 128 + SIGABRT(6), which is what rippled produces on abort().
+      //
+      // The compose entrypoint override (/bin/sh wrapper without exec) ensures
+      // rippled is NOT PID 1.  This is critical: Linux silently drops unhandled
+      // signals for PID 1, including SIGABRT.  As a non-PID-1 process rippled
+      // receives the external SIGABRT normally and exits 134.
+      if (options.noRestart && !options.detach) {
+        const { spawn: spawnProc, execSync } = await import('child_process');
+        const containerName = `${COMPOSE_PROJECT}-rippled-1`;
+        let abortSent = false;
+
+        // Record the timestamp we start watching so we only look at new log lines.
+        const watchFrom = new Date().toISOString();
+
+        // Poll docker logs every 500 ms for the crash pattern.
+        const pollInterval = setInterval(() => {
+          if (abortSent) { clearInterval(pollInterval); return; }
+          try {
+            const recent = execSync(
+              `docker logs --since "${watchFrom}" --tail 50 ${containerName} 2>&1`,
+              { timeout: 2000 },
+            ).toString();
+            if (recent.includes('Logic error:') || recent.includes('Assertion failed:')) {
+              abortSent = true;
+              clearInterval(pollInterval);
+              // Send SIGABRT to rippled's own PID (not PID 1) via docker exec.
+              execSync(
+                `docker exec ${containerName} sh -c "kill -6 \\$(ps ax | grep /opt/ripple/bin/rippled | grep -v 'sh -c\\|grep\\|ps' | awk '{print \\$1}' | head -1)"`,
+                { timeout: 3000, stdio: 'pipe' },
+              );
+            }
+          } catch { /* transient error — keep polling */ }
+        }, 500);
+
+        // docker wait blocks until the container exits and echoes the exit code.
+        const waiter = spawnProc('docker', ['wait', containerName], {
+          stdio: ['ignore', 'pipe', 'inherit'],
+        });
+        waiter.stdout?.on('data', (data: Buffer) => {
+          clearInterval(pollInterval);
+          const code = parseInt(data.toString().trim(), 10);
+          const note = code === 134 ? ' (SIGABRT — process crashed)' : '';
+          logger.log(chalk.red(`\n✗ rippled exited — code ${code}${note}`));
+        });
+      }
     } catch (err: unknown) {
       dockerSpinner.fail('Failed to start local stack');
       logger.error(err instanceof Error ? err.message : String(err));
@@ -236,6 +296,9 @@ export async function nodeCommand(options: NodeOptions = {}): Promise<void> {
     logger.log(`${chalk.dim('Ledger:')}     ${chalk.dim(`auto-advance every ${ledgerInterval}ms`)}`);
     if (options.debug) {
       logger.log(`${chalk.dim('Logs:')}       ${chalk.dim('debug level — run: xrpl-up logs rippled')}`);
+    }
+    if (options.noRestart) {
+      logger.log(`${chalk.dim('Restart:')}    ${chalk.dim('disabled — container will exit with rippled\'s code')}`);
     }
   }
   logger.blank();
