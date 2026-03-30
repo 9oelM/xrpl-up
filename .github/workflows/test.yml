@@ -1,6 +1,9 @@
 name: Test
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -17,4 +20,7 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci
-      - run: npm test
+      - name: Run e2e tests against local docker node
+        env:
+          XRPL_LOCAL_TEARDOWN: '1'
+        run: npm run test:e2e:local
