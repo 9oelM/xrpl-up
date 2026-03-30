@@ -350,7 +350,7 @@ amendment
       .catch(handleError);
   });
 
-// ── xrpl-cli merged commands ──────────────────────────────────────────────────
+// ── XRPL interaction commands ──────────────────────────────────────────────────
 program.addCommand(walletCommand);
 program.addCommand(accountCommand);
 program.addCommand(paymentCommand);
