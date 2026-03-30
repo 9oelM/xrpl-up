@@ -10,7 +10,6 @@ import { statusCommand } from './commands/status';
 import { composeDown } from './core/compose';
 import { snapshotSave, snapshotRestore, snapshotList } from './commands/snapshot';
 import { configExport, configValidate } from './commands/config';
-import { ammInfoCommand, ammCreateCommand } from './commands/amm';
 import { resetCommand } from './commands/reset';
 import {
   nftMintCommand, nftListCommand, nftOffersCommand,
@@ -67,6 +66,7 @@ import { multisigCommand } from './cli/commands/multisig';
 import { oracleCommand } from './cli/commands/oracle';
 import { permissionedDomainCommand } from './cli/commands/permissioned-domain';
 import { vaultCommand } from './cli/commands/vault';
+import { ammCommand } from './cli/commands/amm';
 
 const pkg = require('../package.json') as { version: string };
 const program = new Command();
@@ -321,62 +321,6 @@ configCmd
   .action((file: string) => {
     configValidate(file);
   });
-
-// ── amm ───────────────────────────────────────────────────────────────────────
-const amm = program
-  .command('amm')
-  .description('Query AMM pool state');
-
-amm
-  .command('create <asset1> <asset2>')
-  .description(
-    'Create an AMM pool with fresh funded accounts (e.g. XRP USD or USD EUR)'
-  )
-  .option('--amount1 <number>', 'Amount of asset1 to deposit (default: 100)')
-  .option('--amount2 <number>', 'Amount of asset2 to deposit (default: 100)')
-  .option('--fee <percent>', 'Trading fee in % e.g. 0.5 for 0.5% (default: 0.5)')
-  .option('--local', 'Use the local Docker sandbox')
-  .option('-n, --network <network>', 'Network', 'testnet')
-  .action((asset1: string, asset2: string, opts: {
-    amount1?: string;
-    amount2?: string;
-    fee?: string;
-    local?: boolean;
-    network: string;
-  }) => {
-    ammCreateCommand({
-      asset1,
-      asset2,
-      amount1: opts.amount1 !== undefined ? Number(opts.amount1) : undefined,
-      amount2: opts.amount2 !== undefined ? Number(opts.amount2) : undefined,
-      fee: opts.fee !== undefined ? Number(opts.fee) : undefined,
-      local: opts.local,
-      network: opts.network,
-    }).catch(handleError);
-  });
-
-amm
-  .command('info [asset1] [asset2]')
-  .description(
-    'Show AMM pool info for an asset pair (e.g. XRP USD.rIssuer) or by AMM account'
-  )
-  .option('--account <address>', 'Query by AMM account address instead of asset pair')
-  .option('--local', 'Query the local Docker sandbox')
-  .option('-n, --network <network>', 'Network', 'testnet')
-  .action((asset1: string | undefined, asset2: string | undefined, opts: {
-    account?: string;
-    local?: boolean;
-    network: string;
-  }) => {
-    ammInfoCommand({
-      asset1,
-      asset2,
-      account: opts.account,
-      local: opts.local,
-      network: opts.network,
-    }).catch(handleError);
-  });
-
 
 // ── nft ───────────────────────────────────────────────────────────────────────
 const nft = program
@@ -1121,6 +1065,7 @@ program.addCommand(multisigCommand);
 program.addCommand(oracleCommand);
 program.addCommand(permissionedDomainCommand);
 program.addCommand(vaultCommand);
+program.addCommand(ammCommand);
 
 /* ── Error handling ─────────────────────────────────────────────────────────── */
 function handleError(err: unknown): void {
