@@ -1,7 +1,7 @@
 ---
 name: xrpl-up
 description: Command-line interface for the XRP Ledger — send transactions, manage wallets, query accounts, and interact with AMM/NFT/DeFi features without writing scripts
-version: 0.1.3
+---
 
 ## Installation
 
@@ -18,7 +18,7 @@ npx xrpl-up <command>
 Smoke-test after install:
 
 ```bash
-xrpl --version
+xrpl-up --version
 ```
 
 ## Security Rules for Agents
@@ -60,13 +60,13 @@ Named network shorthands:
 **Custom endpoint example:**
 
 ```bash
-xrpl --node wss://xrpl.example.com:51233 account balance rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
+xrpl-up --node wss://xrpl.example.com:51233 account balance rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
 ```
 
 **Example — query balance on testnet:**
 
 ```bash
-xrpl --node testnet account balance rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
+xrpl-up --node testnet account balance rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
 ```
 
 ## Common Signing Flags
@@ -99,7 +99,7 @@ chmod 600 ~/.xrpl/keystore.pwd
 export XRPL_PASSWORD=$(cat ~/.xrpl/keystore.pwd)
 
 # Pass to CLI via --password
-xrpl --node testnet payment \
+xrpl-up --node testnet payment \
   --account rSenderXXX \
   --destination rReceiverXXX \
   --amount 10 \
@@ -109,7 +109,7 @@ xrpl --node testnet payment \
 **Option 2 — inline pipe (one-off commands):**
 
 ```bash
-xrpl --node testnet payment \
+xrpl-up --node testnet payment \
   --account rSenderXXX \
   --destination rReceiverXXX \
   --amount 10 \
@@ -133,7 +133,7 @@ Generate a new random XRPL wallet.
 | `--alias <name>` | string | No | — | Human-readable alias when saving to keystore |
 
 ```bash
-xrpl wallet new --key-type ed25519 --save --alias alice
+xrpl-up wallet new --key-type ed25519 --save --alias alice
 ```
 
 ### wallet new-mnemonic
@@ -147,7 +147,7 @@ Generate a new BIP39 mnemonic wallet.
 | `--alias <name>` | string | No | — | Human-readable alias when saving to keystore |
 
 ```bash
-xrpl wallet new-mnemonic --save --alias alice-mnemonic
+xrpl-up wallet new-mnemonic --save --alias alice-mnemonic
 ```
 
 ### wallet import
@@ -161,7 +161,7 @@ Import key material (seed, mnemonic, or private key) into the encrypted keystore
 | `--force` | boolean | No | false | Overwrite existing keystore entry |
 
 ```bash
-xrpl wallet import sEd... --alias bob
+xrpl-up wallet import sEd... --alias bob
 ```
 
 ### wallet list
@@ -172,7 +172,7 @@ List accounts stored in the keystore.
 |------|------|----------|---------|-------------|
 
 ```bash
-xrpl wallet list --json
+xrpl-up wallet list --json
 ```
 
 ### wallet address
@@ -186,7 +186,7 @@ Derive the XRPL address from key material.
 | `--key-type <type>` | string | No | — | Key algorithm (required for unprefixed hex private keys) |
 
 ```bash
-xrpl wallet address --seed sEd...
+xrpl-up wallet address --seed sEd...
 ```
 
 ### wallet public-key
@@ -199,7 +199,7 @@ Derive the public key from key material.
 | `--private-key <hex>` | string | No | — | Raw private key hex |
 
 ```bash
-xrpl wallet public-key --seed sEd...
+xrpl-up wallet public-key --seed sEd...
 ```
 
 ### wallet private-key
@@ -213,7 +213,7 @@ Derive the private key from a seed or mnemonic.
 | `--seed <seed>` | string | No | — | Family seed (`sXXX...`) |
 
 ```bash
-xrpl wallet private-key --seed sEd...
+xrpl-up wallet private-key --seed sEd...
 ```
 
 ### wallet sign
@@ -228,7 +228,7 @@ Sign a UTF-8 message or an XRPL transaction blob.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl wallet sign --message "hello xrpl" --seed sEd...
+xrpl-up wallet sign --message "hello xrpl" --seed sEd...
 ```
 
 ### wallet verify
@@ -244,7 +244,7 @@ Verify a message signature or a signed transaction blob.
 | `--tx <tx_blob_hex>` | string | No | — | Signed transaction blob hex to verify |
 
 ```bash
-xrpl wallet verify --message "hello xrpl" --signature <hex> --public-key <hex>
+xrpl-up wallet verify --message "hello xrpl" --signature <hex> --public-key <hex>
 ```
 
 ### wallet fund
@@ -255,7 +255,7 @@ Fund an address from the testnet or devnet faucet.
 |------|------|----------|---------|-------------|
 
 ```bash
-xrpl wallet fund rXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+xrpl-up wallet fund rXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ```
 
 ### wallet alias
@@ -269,7 +269,7 @@ Manage human-readable aliases for keystore entries.
 | `--force` | boolean | No | false | Overwrite existing alias |
 
 ```bash
-xrpl wallet alias set rXXX... alice
+xrpl-up wallet alias set rXXX... alice
 ```
 
 **wallet alias list** — List all aliases.
@@ -278,7 +278,7 @@ xrpl wallet alias set rXXX... alice
 |------|------|----------|---------|-------------|
 
 ```bash
-xrpl wallet alias list
+xrpl-up wallet alias list
 ```
 
 **wallet alias remove** — Remove the alias for an address.
@@ -287,7 +287,7 @@ xrpl wallet alias list
 |------|------|----------|---------|-------------|
 
 ```bash
-xrpl wallet alias remove rXXX...
+xrpl-up wallet alias remove rXXX...
 ```
 
 ### wallet change-password
@@ -300,7 +300,7 @@ Re-encrypt a keystore entry with a new password.
 | `--new-password <new>` | string | No | — | New password (insecure; prefer interactive prompt) |
 
 ```bash
-xrpl wallet change-password rXXX...
+xrpl-up wallet change-password rXXX...
 ```
 
 ### wallet decrypt-keystore
@@ -313,7 +313,7 @@ Decrypt a keystore file to retrieve the seed or private key.
 | `--show-private-key` | boolean | No | false | Also print the private key hex |
 
 ```bash
-xrpl wallet decrypt-keystore rXXX... --show-private-key
+xrpl-up wallet decrypt-keystore rXXX... --show-private-key
 ```
 
 ### wallet remove
@@ -324,7 +324,7 @@ Remove a wallet from the keystore.
 |------|------|----------|---------|-------------|
 
 ```bash
-xrpl wallet remove rXXX...
+xrpl-up wallet remove rXXX...
 ```
 
 ## account
@@ -339,7 +339,7 @@ Get full on-ledger account information (balance, sequence, owner count, flags, r
 |------|------|----------|---------|-------------|
 
 ```bash
-xrpl account info rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
+xrpl-up account info rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
 ```
 
 ### account balance
@@ -351,7 +351,7 @@ Get the XRP balance of an account.
 | `--drops` | boolean | No | false | Output raw drops as a plain integer string |
 
 ```bash
-xrpl account balance rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
+xrpl-up account balance rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
 ```
 
 ### account set
@@ -373,7 +373,7 @@ Update account settings with an AccountSet transaction.
 \* Exactly one of `--seed`, `--mnemonic`, or `--account` is required.
 
 ```bash
-xrpl account set --seed sEd... --set-flag defaultRipple
+xrpl-up account set --seed sEd... --set-flag defaultRipple
 ```
 
 ### account delete
@@ -392,7 +392,7 @@ Submit an AccountDelete transaction to delete an account and send remaining XRP 
 \* Exactly one of `--seed`, `--mnemonic`, or `--account` is required.
 
 ```bash
-xrpl account delete --seed sEd... --destination rXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX --confirm
+xrpl-up account delete --seed sEd... --destination rXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX --confirm
 ```
 
 ### account set-regular-key
@@ -409,7 +409,7 @@ Assign or remove the regular signing key on an account (SetRegularKey).
 † Exactly one of `--key` or `--remove` is required; they are mutually exclusive.
 
 ```bash
-xrpl account set-regular-key --seed sEd... --key rRegularKeyAddress...
+xrpl-up account set-regular-key --seed sEd... --key rRegularKeyAddress...
 ```
 
 ### account trust-lines
@@ -423,7 +423,7 @@ List trust lines for an account.
 | `--marker <json-string>` | string | No | — | Pagination marker from a previous `--json` response |
 
 ```bash
-xrpl account trust-lines rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
+xrpl-up account trust-lines rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
 ```
 
 ### account offers
@@ -436,7 +436,7 @@ List open DEX offers for an account.
 | `--marker <json-string>` | string | No | — | Pagination marker from a previous `--json` response |
 
 ```bash
-xrpl account offers rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
+xrpl-up account offers rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
 ```
 
 ### account channels
@@ -450,7 +450,7 @@ List payment channels for an account.
 | `--marker <json-string>` | string | No | — | Pagination marker from a previous `--json` response |
 
 ```bash
-xrpl account channels rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
+xrpl-up account channels rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
 ```
 
 ### account transactions
@@ -463,7 +463,7 @@ List recent transactions for an account.
 | `--marker <json-string>` | string | No | — | Pagination marker from a previous `--json` response |
 
 ```bash
-xrpl account transactions rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh --limit 10
+xrpl-up account transactions rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh --limit 10
 ```
 
 ### account nfts
@@ -476,7 +476,7 @@ List NFTs owned by an account.
 | `--marker <json-string>` | string | No | — | Pagination marker from a previous `--json` response |
 
 ```bash
-xrpl account nfts rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
+xrpl-up account nfts rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
 ```
 
 ### account mptokens
@@ -489,7 +489,7 @@ List Multi-Purpose Tokens (MPT) held by an account.
 | `--marker <json-string>` | string | No | — | Pagination marker from a previous `--json` response |
 
 ```bash
-xrpl account mptokens rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
+xrpl-up account mptokens rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
 ```
 
 ## payment
@@ -515,7 +515,7 @@ Alias: `send`. Send a Payment transaction on the XRP Ledger.
 \* Exactly one of `--seed`, `--mnemonic`, or `--account` is required.
 
 ```bash
-xrpl payment --to rDestination... --amount 1.5 --seed sEd...
+xrpl-up payment --to rDestination... --amount 1.5 --seed sEd...
 ```
 
 ## trust
@@ -544,7 +544,7 @@ Create or update a trust line (TrustSet transaction). Setting `--limit 0` effect
 `--no-ripple` and `--clear-no-ripple` are mutually exclusive. `--freeze` and `--unfreeze` are mutually exclusive.
 
 ```bash
-xrpl trust set --currency USD --issuer rIssuer... --limit 1000 --seed sEd...
+xrpl-up trust set --currency USD --issuer rIssuer... --limit 1000 --seed sEd...
 ```
 
 ### trust delete
@@ -552,7 +552,7 @@ xrpl trust set --currency USD --issuer rIssuer... --limit 1000 --seed sEd...
 Remove a trust line by setting its limit to zero.
 
 ```bash
-xrpl trust set --currency USD --issuer rIssuer... --limit 0 --seed sEd...
+xrpl-up trust set --currency USD --issuer rIssuer... --limit 0 --seed sEd...
 ```
 
 ## offer
@@ -579,7 +579,7 @@ Create a DEX offer (OfferCreate transaction).
 `--immediate-or-cancel` and `--fill-or-kill` are mutually exclusive.
 
 ```bash
-xrpl offer create --taker-pays 10/USD/rIssuer... --taker-gets 1.5 --seed sEd...
+xrpl-up offer create --taker-pays 10/USD/rIssuer... --taker-gets 1.5 --seed sEd...
 ```
 
 ### offer cancel
@@ -594,7 +594,7 @@ Cancel an existing DEX offer (OfferCancel transaction).
 \* Exactly one of `--seed`, `--mnemonic`, or `--account` is required.
 
 ```bash
-xrpl offer cancel --sequence 12 --seed sEd...
+xrpl-up offer cancel --sequence 12 --seed sEd...
 ```
 
 ## clawback
@@ -612,10 +612,10 @@ Claw back issued tokens (IOU or MPT) from a holder account.
 
 ```bash
 # IOU clawback
-xrpl clawback --amount 50/USD/rHolder... --seed sEd...
+xrpl-up clawback --amount 50/USD/rHolder... --seed sEd...
 
 # MPT clawback
-xrpl clawback --amount 100/0000000000000000000000000000000000000001 --holder rHolder... --seed sEd...
+xrpl-up clawback --amount 100/0000000000000000000000000000000000000001 --holder rHolder... --seed sEd...
 ```
 
 ## channel
@@ -639,7 +639,7 @@ Open a new payment channel (PaymentChannelCreate transaction).
 \* Exactly one of `--seed`, `--mnemonic`, or `--account` is required.
 
 ```bash
-xrpl channel create --to rDestination... --amount 10 --settle-delay 86400 --seed sEd...
+xrpl-up channel create --to rDestination... --amount 10 --settle-delay 86400 --seed sEd...
 ```
 
 ### channel fund
@@ -656,7 +656,7 @@ Add XRP to an existing payment channel (PaymentChannelFund transaction).
 \* Exactly one of `--seed`, `--mnemonic`, or `--account` is required.
 
 ```bash
-xrpl channel fund --channel <64-hex-id> --amount 5 --seed sEd...
+xrpl-up channel fund --channel <64-hex-id> --amount 5 --seed sEd...
 ```
 
 ### channel sign
@@ -672,7 +672,7 @@ Sign an off-chain payment channel claim (offline — no network call).
 \* Exactly one of `--seed`, `--mnemonic`, or `--account` is required.
 
 ```bash
-xrpl channel sign --channel <64-hex-id> --amount 5 --seed sEd...
+xrpl-up channel sign --channel <64-hex-id> --amount 5 --seed sEd...
 ```
 
 ### channel verify
@@ -687,7 +687,7 @@ Verify an off-chain payment channel claim signature (offline — no network call
 | `--public-key <hex>` | string | Yes | — | Hex-encoded public key of the signer |
 
 ```bash
-xrpl channel verify --channel <64-hex-id> --amount 5 --signature <hex> --public-key <hex>
+xrpl-up channel verify --channel <64-hex-id> --amount 5 --signature <hex> --public-key <hex>
 ```
 
 ### channel claim
@@ -708,7 +708,7 @@ Redeem a signed payment channel claim or request channel closure (PaymentChannel
 \* Exactly one of `--seed`, `--mnemonic`, or `--account` is required.
 
 ```bash
-xrpl channel claim --channel <64-hex-id> --amount 5 --balance 5 --signature <hex> --public-key <hex> --seed sEd...
+xrpl-up channel claim --channel <64-hex-id> --amount 5 --balance 5 --signature <hex> --public-key <hex> --seed sEd...
 ```
 
 ### channel list
@@ -720,7 +720,7 @@ List open payment channels for an account (read-only, no key material needed).
 | `--destination <address>` | string | No | — | Filter channels by destination account |
 
 ```bash
-xrpl channel list rSource...
+xrpl-up channel list rSource...
 ```
 
 ## escrow
@@ -746,7 +746,7 @@ Create an escrow on the XRP Ledger (EscrowCreate transaction). At least one of `
 † At least one of `--finish-after`, `--cancel-after`, or `--condition` must be provided.
 
 ```bash
-xrpl escrow create --to rDestination... --amount 10 --finish-after 2030-01-01T00:00:00Z --seed sEd...
+xrpl-up escrow create --to rDestination... --amount 10 --finish-after 2030-01-01T00:00:00Z --seed sEd...
 ```
 
 ### escrow finish
@@ -765,7 +765,7 @@ Release funds from an escrow (EscrowFinish transaction).
 ‡ `--condition` and `--fulfillment` must be provided together (or both omitted).
 
 ```bash
-xrpl escrow finish --owner rCreator... --sequence 12 --seed sEd...
+xrpl-up escrow finish --owner rCreator... --sequence 12 --seed sEd...
 ```
 
 ### escrow cancel
@@ -781,7 +781,7 @@ Cancel an expired escrow and return funds to the owner (EscrowCancel transaction
 \* Exactly one of `--seed`, `--mnemonic`, or `--account` is required.
 
 ```bash
-xrpl escrow cancel --owner rCreator... --sequence 12 --seed sEd...
+xrpl-up escrow cancel --owner rCreator... --sequence 12 --seed sEd...
 ```
 
 ### escrow list
@@ -792,7 +792,7 @@ List pending escrows for an account (read-only, no key material needed).
 |------|------|----------|---------|-------------|
 
 ```bash
-xrpl escrow list rAccount...
+xrpl-up escrow list rAccount...
 ```
 
 ## check
@@ -815,7 +815,7 @@ Create a Check on the XRP Ledger (CheckCreate transaction).
 \* Exactly one of `--seed`, `--mnemonic`, or `--account` is required.
 
 ```bash
-xrpl check create --to rReceiver... --send-max 10 --seed sEd...
+xrpl-up check create --to rReceiver... --send-max 10 --seed sEd...
 ```
 
 ### check cash
@@ -833,7 +833,7 @@ Cash a Check on the XRP Ledger (CheckCash transaction). Exactly one of `--amount
 † Exactly one of `--amount` or `--deliver-min` is required; they are mutually exclusive.
 
 ```bash
-xrpl check cash --check <64-hex-id> --amount 10 --seed sEd...
+xrpl-up check cash --check <64-hex-id> --amount 10 --seed sEd...
 ```
 
 ### check cancel
@@ -848,7 +848,7 @@ Cancel a Check on the XRP Ledger (CheckCancel transaction).
 \* Exactly one of `--seed`, `--mnemonic`, or `--account` is required.
 
 ```bash
-xrpl check cancel --check <64-hex-id> --seed sEd...
+xrpl-up check cancel --check <64-hex-id> --seed sEd...
 ```
 
 ### check list
@@ -859,7 +859,7 @@ List pending checks for an account (read-only, no key material needed).
 |------|------|----------|---------|-------------|
 
 ```bash
-xrpl check list rAccount...
+xrpl-up check list rAccount...
 ```
 
 ## amm
@@ -880,7 +880,7 @@ Create a new AMM liquidity pool.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl amm create --asset XRP --asset2 USD/rIssuerXXX... --amount 1000000 --amount2 100 --trading-fee 500 --seed sEd...
+xrpl-up amm create --asset XRP --asset2 USD/rIssuerXXX... --amount 1000000 --amount2 100 --trading-fee 500 --seed sEd...
 ```
 
 ### amm deposit
@@ -899,7 +899,7 @@ Deposit assets into an AMM pool.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl amm deposit --asset XRP --asset2 USD/rIssuerXXX... --amount 500000 --seed sEd...
+xrpl-up amm deposit --asset XRP --asset2 USD/rIssuerXXX... --amount 500000 --seed sEd...
 ```
 
 ### amm withdraw
@@ -927,7 +927,7 @@ Withdraw modes (exactly one valid combination required):
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl amm withdraw --asset XRP --asset2 USD/rIssuerXXX... --all --seed sEd...
+xrpl-up amm withdraw --asset XRP --asset2 USD/rIssuerXXX... --all --seed sEd...
 ```
 
 ### amm vote
@@ -942,7 +942,7 @@ Vote on the trading fee for an AMM pool. Vote weight is proportional to LP token
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl amm vote --asset XRP --asset2 USD/rIssuerXXX... --trading-fee 300 --seed sEd...
+xrpl-up amm vote --asset XRP --asset2 USD/rIssuerXXX... --trading-fee 300 --seed sEd...
 ```
 
 ### amm bid
@@ -959,7 +959,7 @@ Bid on an AMM auction slot to earn a reduced trading fee for a time window.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl amm bid --asset XRP --asset2 USD/rIssuerXXX... --bid-min 100 --bid-max 200 --seed sEd...
+xrpl-up amm bid --asset XRP --asset2 USD/rIssuerXXX... --bid-min 100 --bid-max 200 --seed sEd...
 ```
 
 ### amm delete
@@ -975,7 +975,7 @@ Delete an empty AMM pool (all LP tokens must have been returned first).
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl amm delete --asset XRP --asset2 USD/rIssuerXXX... --seed sEd...
+xrpl-up amm delete --asset XRP --asset2 USD/rIssuerXXX... --seed sEd...
 ```
 
 ### amm info
@@ -988,7 +988,7 @@ Query AMM pool state.
 | `--asset2 <spec>` | string | **Yes** | — | Second asset spec |
 
 ```bash
-xrpl amm info --asset XRP --asset2 USD/rIssuerXXX... --json
+xrpl-up amm info --asset XRP --asset2 USD/rIssuerXXX... --json
 ```
 
 ## nft
@@ -1012,7 +1012,7 @@ Mint an NFT.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl nft mint --taxon 42 --uri https://example.com/nft.json --transferable --seed sEd...
+xrpl-up nft mint --taxon 42 --uri https://example.com/nft.json --transferable --seed sEd...
 ```
 
 ### nft burn
@@ -1026,7 +1026,7 @@ Burn (destroy) an NFT.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl nft burn --nft <64hexNFTokenID> --seed sEd...
+xrpl-up nft burn --nft <64hexNFTokenID> --seed sEd...
 ```
 
 ### nft offer create
@@ -1046,7 +1046,7 @@ Create a buy or sell offer for an NFT.
 † `--owner` is required for buy offers.
 
 ```bash
-xrpl nft offer create --nft <64hexID> --amount 10 --sell --seed sEd...
+xrpl-up nft offer create --nft <64hexID> --amount 10 --sell --seed sEd...
 ```
 
 ### nft offer accept
@@ -1063,7 +1063,7 @@ Accept a buy or sell NFT offer (direct or brokered mode).
 † At least one of `--sell-offer` or `--buy-offer` is required.
 
 ```bash
-xrpl nft offer accept --sell-offer <64hexOfferID> --seed sEd...
+xrpl-up nft offer accept --sell-offer <64hexOfferID> --seed sEd...
 ```
 
 ### nft offer cancel
@@ -1076,7 +1076,7 @@ Cancel one or more NFT offers.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl nft offer cancel --offer <64hexOfferID> --seed sEd...
+xrpl-up nft offer cancel --offer <64hexOfferID> --seed sEd...
 ```
 
 ### nft offer list
@@ -1087,7 +1087,7 @@ List all buy and sell offers for an NFT (read-only, no key material needed).
 |------|------|----------|---------|-------------|
 
 ```bash
-xrpl nft offer list <64hexNFTokenID> --json
+xrpl-up nft offer list <64hexNFTokenID> --json
 ```
 
 ## multisig
@@ -1105,7 +1105,7 @@ Configure a multi-signature signer list on an account.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl multisig set --quorum 2 --signers '[{"account":"rSigner1...","weight":1},{"account":"rSigner2...","weight":1}]' --seed sEd...
+xrpl-up multisig set --quorum 2 --signers '[{"account":"rSigner1...","weight":1},{"account":"rSigner2...","weight":1}]' --seed sEd...
 ```
 
 ### multisig sign
@@ -1113,7 +1113,7 @@ xrpl multisig set --quorum 2 --signers '[{"account":"rSigner1...","weight":1},{"
 Produce a partial multisig signature for a transaction.
 
 ```bash
-xrpl multisig sign --tx tx.json --seed sSignerEd...
+xrpl-up multisig sign --tx tx.json --seed sSignerEd...
 ```
 
 ### multisig submit
@@ -1121,7 +1121,7 @@ xrpl multisig sign --tx tx.json --seed sSignerEd...
 Combine partial signatures and submit a multisig transaction.
 
 ```bash
-xrpl multisig submit --tx tx.json --signatures '[...]'
+xrpl-up multisig submit --tx tx.json --signatures '[...]'
 ```
 
 ## oracle
@@ -1143,7 +1143,7 @@ Publish or update an on-chain price oracle (OracleSet).
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl oracle set --document-id 1 --price-data '[{"base_asset":"XRP","quote_asset":"USD","asset_price":100,"scale":2}]' --seed sEd...
+xrpl-up oracle set --document-id 1 --price-data '[{"base_asset":"XRP","quote_asset":"USD","asset_price":100,"scale":2}]' --seed sEd...
 ```
 
 ### oracle delete
@@ -1156,7 +1156,7 @@ Delete an on-chain price oracle (OracleDelete).
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl oracle delete --document-id 1 --seed sEd...
+xrpl-up oracle delete --document-id 1 --seed sEd...
 ```
 
 ## ticket
@@ -1173,7 +1173,7 @@ Reserve ticket sequence numbers on an XRPL account.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl ticket create --count 5 --seed sEd...
+xrpl-up ticket create --count 5 --seed sEd...
 ```
 
 ## credential
@@ -1194,7 +1194,7 @@ Create an on-chain credential for a subject account.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl credential create --subject rSubjectXXX... --credential-type KYCVerified --seed sIssuerEd...
+xrpl-up credential create --subject rSubjectXXX... --credential-type KYCVerified --seed sIssuerEd...
 ```
 
 ### credential accept
@@ -1209,7 +1209,7 @@ Accept an on-chain credential issued to you.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl credential accept --issuer rIssuerXXX... --credential-type KYCVerified --seed sSubjectEd...
+xrpl-up credential accept --issuer rIssuerXXX... --credential-type KYCVerified --seed sSubjectEd...
 ```
 
 ### credential delete
@@ -1225,7 +1225,7 @@ Delete an on-chain credential (revoke or clean up).
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl credential delete --subject rSubjectXXX... --credential-type KYCVerified --seed sIssuerEd...
+xrpl-up credential delete --subject rSubjectXXX... --credential-type KYCVerified --seed sIssuerEd...
 ```
 
 ## mptoken
@@ -1246,7 +1246,7 @@ Create a new MPT issuance (MPTokenIssuanceCreate).
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl mptoken create-issuance --max-amount 1000000 --flags can-transfer --seed sEd...
+xrpl-up mptoken create-issuance --max-amount 1000000 --flags can-transfer --seed sEd...
 ```
 
 ### mptoken destroy-issuance
@@ -1254,7 +1254,7 @@ xrpl mptoken create-issuance --max-amount 1000000 --flags can-transfer --seed sE
 Destroy an MPT issuance (MPTokenIssuanceDestroy).
 
 ```bash
-xrpl mptoken destroy-issuance --issuance-id <hex> --seed sEd...
+xrpl-up mptoken destroy-issuance --issuance-id <hex> --seed sEd...
 ```
 
 ### mptoken authorize
@@ -1262,7 +1262,7 @@ xrpl mptoken destroy-issuance --issuance-id <hex> --seed sEd...
 Authorize a holder to hold an MPT (when require-auth is set).
 
 ```bash
-xrpl mptoken authorize --issuance-id <hex> --holder rHolderXXX... --seed sIssuerEd...
+xrpl-up mptoken authorize --issuance-id <hex> --holder rHolderXXX... --seed sIssuerEd...
 ```
 
 ### mptoken unauthorize
@@ -1270,7 +1270,7 @@ xrpl mptoken authorize --issuance-id <hex> --holder rHolderXXX... --seed sIssuer
 Revoke holder authorization for an MPT.
 
 ```bash
-xrpl mptoken unauthorize --issuance-id <hex> --holder rHolderXXX... --seed sIssuerEd...
+xrpl-up mptoken unauthorize --issuance-id <hex> --holder rHolderXXX... --seed sIssuerEd...
 ```
 
 ### mptoken mint
@@ -1278,7 +1278,7 @@ xrpl mptoken unauthorize --issuance-id <hex> --holder rHolderXXX... --seed sIssu
 Opt a holder into receiving an MPT issuance.
 
 ```bash
-xrpl mptoken mint --issuance-id <hex> --seed sHolderEd...
+xrpl-up mptoken mint --issuance-id <hex> --seed sHolderEd...
 ```
 
 ### mptoken burn
@@ -1286,7 +1286,7 @@ xrpl mptoken mint --issuance-id <hex> --seed sHolderEd...
 Opt a holder out of an MPT issuance (burn their balance).
 
 ```bash
-xrpl mptoken burn --issuance-id <hex> --seed sHolderEd...
+xrpl-up mptoken burn --issuance-id <hex> --seed sHolderEd...
 ```
 
 ## permissioned-domain
@@ -1304,7 +1304,7 @@ Create a new permissioned domain with a set of accepted credentials.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl permissioned-domain create --credentials-json '[{"issuer":"rIssuerXXX...","credential_type":"4b5943"}]' --seed sEd...
+xrpl-up permissioned-domain create --credentials-json '[{"issuer":"rIssuerXXX...","credential_type":"4b5943"}]' --seed sEd...
 ```
 
 ### permissioned-domain update
@@ -1318,7 +1318,7 @@ Update the accepted credentials for a permissioned domain.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl permissioned-domain update --domain-id <64hexID> --credentials-json '[...]' --seed sEd...
+xrpl-up permissioned-domain update --domain-id <64hexID> --credentials-json '[...]' --seed sEd...
 ```
 
 ### permissioned-domain delete
@@ -1331,7 +1331,7 @@ Delete a permissioned domain, reclaiming the reserve.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl permissioned-domain delete --domain-id <64hexID> --seed sEd...
+xrpl-up permissioned-domain delete --domain-id <64hexID> --seed sEd...
 ```
 
 ## vault
@@ -1353,7 +1353,7 @@ Create a single-asset vault on the XRP Ledger.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl vault create --asset XRP --assets-maximum 1000000 --seed sEd...
+xrpl-up vault create --asset XRP --assets-maximum 1000000 --seed sEd...
 ```
 
 ### vault deposit
@@ -1367,7 +1367,7 @@ Deposit assets into a vault and receive vault shares.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl vault deposit --vault-id <64hexID> --amount 10 --seed sEd...
+xrpl-up vault deposit --vault-id <64hexID> --amount 10 --seed sEd...
 ```
 
 ### vault withdraw
@@ -1375,7 +1375,7 @@ xrpl vault deposit --vault-id <64hexID> --amount 10 --seed sEd...
 Withdraw assets from a vault by burning vault shares.
 
 ```bash
-xrpl vault withdraw --vault-id <64hexID> --amount 10 --seed sEd...
+xrpl-up vault withdraw --vault-id <64hexID> --amount 10 --seed sEd...
 ```
 
 ### vault delete
@@ -1383,7 +1383,7 @@ xrpl vault withdraw --vault-id <64hexID> --amount 10 --seed sEd...
 Delete a vault you own.
 
 ```bash
-xrpl vault delete --vault-id <64hexID> --seed sEd...
+xrpl-up vault delete --vault-id <64hexID> --seed sEd...
 ```
 
 ### vault clawback
@@ -1391,7 +1391,7 @@ xrpl vault delete --vault-id <64hexID> --seed sEd...
 Claw back assets from a vault (issuer only).
 
 ```bash
-xrpl vault clawback --vault-id <64hexID> --holder rHolderXXX... --seed sIssuerEd...
+xrpl-up vault clawback --vault-id <64hexID> --holder rHolderXXX... --seed sIssuerEd...
 ```
 
 ## did
@@ -1413,7 +1413,7 @@ Publish or update a Decentralized Identifier (DID) on-chain (DIDSet).
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl did set --uri https://example.com/did.json --seed sEd...
+xrpl-up did set --uri https://example.com/did.json --seed sEd...
 ```
 
 ### did delete
@@ -1425,7 +1425,7 @@ Delete the sender's on-chain Decentralized Identifier (DIDDelete).
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl did delete --seed sEd...
+xrpl-up did delete --seed sEd...
 ```
 
 ## deposit-preauth
@@ -1447,7 +1447,7 @@ Grant or revoke deposit preauthorization for an account or credential.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl deposit-preauth set --authorize rAllowedXXX... --seed sEd...
+xrpl-up deposit-preauth set --authorize rAllowedXXX... --seed sEd...
 ```
 
 ### deposit-preauth list
@@ -1458,7 +1458,7 @@ List deposit preauthorizations for an account.
 |------|------|----------|---------|-------------|
 
 ```bash
-xrpl deposit-preauth list rXXX... --json
+xrpl-up deposit-preauth list rXXX... --json
 ```
 
 ## Common Agent Workflows
@@ -1467,13 +1467,13 @@ xrpl deposit-preauth list rXXX... --json
 
 ```bash
 # 1. Generate and save a new wallet
-xrpl --node testnet wallet new --save --alias sender
+xrpl-up --node testnet wallet new --save --alias sender
 
 # 2. Fund from testnet faucet
-xrpl --node testnet wallet fund rSenderXXXXXXXXXXXXXXXXXXXXXXXXX
+xrpl-up --node testnet wallet fund rSenderXXXXXXXXXXXXXXXXXXXXXXXXX
 
 # 3. Send XRP to another address
-xrpl --node testnet payment \
+xrpl-up --node testnet payment \
   --to rReceiverXXXXXXXXXXXXXXXXXXXXXXX \
   --amount 1.5 \
   --account rSenderXXXXXXXXXXXXXXXXXXXXXXXXX \
@@ -1484,7 +1484,7 @@ xrpl --node testnet payment \
 
 ```bash
 # 1. Set up a trust line for the token
-xrpl --node testnet trust set \
+xrpl-up --node testnet trust set \
   --currency USD \
   --issuer rIssuerXXXXXXXXXXXXXXXXXXXXXXXXX \
   --limit 1000 \
@@ -1492,7 +1492,7 @@ xrpl --node testnet trust set \
   --password mypassword
 
 # 2. Receive tokens via payment from the issuer
-xrpl --node testnet payment \
+xrpl-up --node testnet payment \
   --to rHolderXXXXXXXXXXXXXXXXXXXXXXXXX \
   --amount 100/USD/rIssuerXXXXXXXXXXXXXXXXXXXXXXXXX \
   --account rIssuerXXXXXXXXXXXXXXXXXXXXXXXXX \
@@ -1503,7 +1503,7 @@ xrpl --node testnet payment \
 
 ```bash
 # 1. Create AMM pool with XRP and USD
-xrpl --node testnet amm create \
+xrpl-up --node testnet amm create \
   --asset XRP \
   --asset2 USD/rIssuerXXXXXXXXXXXXXXXXXXXXXXXXX \
   --amount 10000000 \
@@ -1513,10 +1513,147 @@ xrpl --node testnet amm create \
   --password mypassword
 
 # 2. Withdraw all liquidity using tfWithdrawAll (auto-deletes pool when no other LP holders)
-xrpl --node testnet amm withdraw \
+xrpl-up --node testnet amm withdraw \
   --asset XRP \
   --asset2 USD/rIssuerXXXXXXXXXXXXXXXXXXXXXXXXX \
   --all \
   --account rOwnerXXXXXXXXXXXXXXXXXXXXXXXXX \
   --password mypassword
+```
+
+---
+
+## xrpl-up Local Node Management
+
+These commands are unique to xrpl-up and manage the local rippled Docker sandbox.
+
+### `node` — Start local sandbox
+
+```bash
+# Start local rippled node with 10 pre-funded accounts
+xrpl-up node --local
+
+# Run in background (detached)
+xrpl-up node --local --detach
+
+# Persist ledger state across restarts
+xrpl-up node --local --persist
+
+# Custom ledger interval
+xrpl-up node --local --ledger-interval 500
+
+# Fork XRP balances from testnet
+xrpl-up node --local --fork
+
+# Use a specific Docker image
+xrpl-up node --local --image xrpllabsofficial/xrpld:2.3.0
+```
+
+### `status` — Show node health
+
+```bash
+xrpl-up status --local
+xrpl-up status --network testnet
+```
+
+### `accounts` — List sandbox accounts
+
+```bash
+# List all local sandbox accounts and their balances
+xrpl-up accounts --local
+
+# Query a specific address
+xrpl-up accounts --local --address rXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+```
+
+### `faucet` — Fund an account
+
+```bash
+# Fund a new random wallet on testnet
+xrpl-up faucet
+
+# Fund a specific seed on the local sandbox
+xrpl-up faucet --local --seed sEdXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+# Fund on devnet
+xrpl-up faucet --network devnet
+```
+
+### `logs` — Stream Docker logs
+
+```bash
+xrpl-up logs
+xrpl-up logs rippled
+xrpl-up logs faucet
+```
+
+### `stop` — Stop the sandbox
+
+```bash
+xrpl-up stop
+```
+
+### `reset` — Wipe all sandbox state
+
+```bash
+xrpl-up reset
+xrpl-up reset --snapshots   # also delete saved snapshots
+```
+
+### `snapshot` — Save/restore ledger state
+
+Requires `--persist` mode.
+
+```bash
+xrpl-up snapshot save my-state
+xrpl-up snapshot restore my-state
+xrpl-up snapshot list
+```
+
+### `config` — Manage rippled configuration
+
+```bash
+# Print the generated rippled.cfg
+xrpl-up config export
+
+# Save to file
+xrpl-up config export --output ./rippled.cfg
+
+# Validate a custom config
+xrpl-up config validate ./rippled.cfg
+```
+
+### `amendment` — Inspect and manage amendments
+
+```bash
+# List all amendments and their enabled/disabled status
+xrpl-up amendment list --local
+
+# Show details for a specific amendment
+xrpl-up amendment info DynamicNFT --local
+xrpl-up amendment info C1CE18F2A268E --local
+
+# Force-enable an amendment (local sandbox only, admin RPC)
+xrpl-up amendment enable DynamicNFT --local
+
+# Veto an amendment
+xrpl-up amendment disable DynamicNFT --local
+
+# Sync amendments from testnet to local
+xrpl-up amendment sync --local
+```
+
+### `run` — Run a script against an XRPL network
+
+```bash
+xrpl-up run ./my-script.ts
+xrpl-up run --local ./my-script.ts
+xrpl-up run --network devnet ./my-script.ts arg1 arg2
+```
+
+### `init` — Scaffold a new XRPL project
+
+```bash
+xrpl-up init
+xrpl-up init my-project
 ```

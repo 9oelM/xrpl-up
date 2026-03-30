@@ -1,0 +1,8 @@
+{
+  "name": "xrpl-up",
+  "description": "Claude skill for xrpl-up — send transactions, manage wallets, query accounts, spin up local XRPL nodes, and interact with features on the XRP Ledger",
+  "version": "0.1.0",
+  "author": {
+    "name": "xrpl-up"
+  }
+}
