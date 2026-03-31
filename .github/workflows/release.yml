@@ -225,7 +225,7 @@ jobs:
         run: cyclonedx-npm --output-format json --output-file sbom.json
 
       - name: Scan SBOM for vulnerabilities using Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: sbom
           scan-ref: sbom.json
