@@ -1,6 +1,7 @@
 import { spawnSync } from "child_process";
 import net from "net";
 import { resolve } from "path";
+import Socket from "@xrplf/isomorphic/ws";
 
 const LOCAL_WS_PORT = 6006;
 const LOCAL_FAUCET_HEALTH = "http://localhost:3001/health";
@@ -49,8 +50,7 @@ function isPortOpen(port: number): Promise<boolean> {
  */
 function getLedgerDrift(): Promise<number | null> {
   return new Promise((resolve) => {
-    // Node.js 22+ has WebSocket built-in
-    const ws = new globalThis.WebSocket(`ws://127.0.0.1:${LOCAL_WS_PORT}`);
+    const ws = new Socket(`ws://127.0.0.1:${LOCAL_WS_PORT}`);
     const timer = setTimeout(() => {
       ws.close();
       resolve(null);
@@ -60,7 +60,7 @@ function getLedgerDrift(): Promise<number | null> {
       ws.send(JSON.stringify({ command: "ledger", ledger_index: "validated" }));
     });
 
-    ws.addEventListener("message", (event: MessageEvent) => {
+    ws.addEventListener("message", (event: { data: unknown }) => {
       clearTimeout(timer);
       try {
         const r = JSON.parse(event.data as string) as {
