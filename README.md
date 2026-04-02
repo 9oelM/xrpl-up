@@ -1173,7 +1173,7 @@ steps:
   - run: xrpl-up node --local --persist --detach
   - run: |
       xrpl-up faucet --network local
-      xrpl-up amm create XRP USD --local
+      xrpl-up amm create XRP USD
       xrpl-up snapshot save after-setup
   - run: npm test -- --suite=suite-a
   - run: xrpl-up snapshot restore after-setup
@@ -1192,7 +1192,7 @@ jobs:
       - run: xrpl-up node --local --persist --detach
       - run: |
           xrpl-up faucet --network local
-          xrpl-up amm create XRP USD --local
+          xrpl-up amm create XRP USD
           xrpl-up snapshot save after-setup
       - uses: actions/upload-artifact@v4
         with:
@@ -1242,7 +1242,7 @@ steps:
   - run: |
       if ! xrpl-up snapshot restore after-setup; then
         xrpl-up faucet --network local
-        xrpl-up amm create XRP USD --local
+        xrpl-up amm create XRP USD
         xrpl-up snapshot save after-setup
       fi
   - run: npm test
@@ -1336,7 +1336,7 @@ steps:
   - run: xrpl-up node --local --persist --detach
   - run: |
       xrpl-up faucet --network local
-      xrpl-up amm create XRP USD --local
+      xrpl-up amm create XRP USD
       xrpl-up snapshot save after-setup
   - run: npm test -- --suite=suite-a
   - run: xrpl-up snapshot restore after-setup
