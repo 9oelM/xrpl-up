@@ -123,24 +123,25 @@ export async function snapshotSave(name: string): Promise<void> {
     );
   }
 
-  // Stop faucet then rippled so SQLite WAL is checkpointed cleanly on shutdown.
-  // A clean shutdown flushes the WAL into the main .db file, making the
-  // snapshot consistent for restore. Faucet must stop first to avoid crashing
-  // on disconnect from rippled.
-  const stopSpinner = ora({ text: chalk.dim('Pausing sandbox…'), prefixText: ' ' }).start();
+  // Stop faucet only — rippled keeps running so its data stays consistent.
+  // NuDB is append-only: tarring a live NuDB directory is safe because all
+  // validated ledger objects are written before a ledger is closed.
+  // SQLite WAL files are included in the tar so restore can recover from them.
+  // We never stop rippled during save because restarting it in standalone mode
+  // requires a ledger hash (SQLite ledger index is not populated in standalone).
+  const stopSpinner = ora({ text: chalk.dim('Pausing faucet…'), prefixText: ' ' }).start();
   try {
     stopService('faucet');
-    stopService('rippled');
-    stopSpinner.succeed(chalk.dim('Sandbox paused'));
+    stopSpinner.succeed(chalk.dim('Faucet paused'));
   } catch {
-    stopSpinner.fail('Failed to stop sandbox — is it running?');
+    stopSpinner.fail('Failed to stop faucet — is the sandbox running?');
     throw new Error(
-      'Could not stop sandbox. Is it running?\n' +
+      'Could not stop faucet. Is the sandbox running?\n' +
       '  Start with: xrpl-up node --local --persist'
     );
   }
 
-  // Tar the volume via an alpine sidecar (both services are stopped — SQLite is consistent)
+  // Tar the volume via an alpine sidecar (rippled is still running — online backup)
   const saveSpinner = ora({ text: chalk.dim(`Saving snapshot "${name}"…`), prefixText: ' ' }).start();
   try {
     execSync(
@@ -153,8 +154,6 @@ export async function snapshotSave(name: string): Promise<void> {
     saveSpinner.succeed(chalk.green(`Snapshot "${name}" saved`));
   } catch (err) {
     saveSpinner.fail(`Failed to save snapshot "${name}"`);
-    // Try to restart both services even on failure
-    startService('rippled');
     startService('faucet');
     throw err;
   }
@@ -167,13 +166,11 @@ export async function snapshotSave(name: string): Promise<void> {
     fs.writeFileSync(sidecar, '[]');
   }
 
-  // Restart rippled first and wait for it to be ready before starting the faucet.
-  const startSpinner = ora({ text: chalk.dim('Resuming sandbox…'), prefixText: ' ' }).start();
-  startService('rippled');
-  await waitForPort(LOCAL_WS_PORT, 30_000, 'rippled WebSocket');
+  // Restart faucet only
+  const startSpinner = ora({ text: chalk.dim('Resuming faucet…'), prefixText: ' ' }).start();
   startService('faucet');
   await waitForPort(FAUCET_PORT, 30_000, 'faucet HTTP');
-  startSpinner.succeed(chalk.dim('Sandbox resumed'));
+  startSpinner.succeed(chalk.dim('Faucet resumed'));
 
   // Show file size
   const stats = fs.statSync(dest);
@@ -222,16 +219,18 @@ export async function snapshotRestore(name: string): Promise<void> {
   }
 
   // Wipe and restore the volume via alpine sidecar.
-  // After extraction, delete any SQLite WAL/SHM files — these are left over
-  // from an online backup and are inconsistent without the corresponding
-  // in-memory state. rippled re-creates them on startup from the main .db file.
+  // The snapshot was taken as an online backup (rippled running), so the
+  // archive includes SQLite .db-wal files with the ledger index. We keep the
+  // WAL so rippled can find its last ledger on startup. We delete only .db-shm
+  // (shared-memory index, tied to the old process) — SQLite auto-rebuilds it
+  // from the WAL on first open.
   const restoreSpinner = ora({ text: chalk.dim(`Restoring snapshot "${name}"…`), prefixText: ' ' }).start();
   try {
     execSync(
       `docker run --rm ` +
       `-v ${VOLUME_NAME}:/data ` +
       `-v "${SNAPSHOTS_DIR}":/snapshots ` +
-      `alpine sh -c "rm -rf /data/* /data/..?* /data/.[!.]* 2>/dev/null; tar xzf /snapshots/${name}.tar.gz -C /data; rm -f /data/*.db-shm /data/*.db-wal"`,
+      `alpine sh -c "rm -rf /data/* /data/..?* /data/.[!.]* 2>/dev/null; tar xzf /snapshots/${name}.tar.gz -C /data; rm -f /data/*.db-shm"`,
       { stdio: 'ignore' }
     );
     restoreSpinner.succeed(chalk.green(`Snapshot "${name}" restored`));
