@@ -42,39 +42,45 @@ function metaSidecarPath(name: string): string {
 }
 
 /**
- * Patch the rippled entrypoint line in the existing compose file so it includes
- * the .restore-hash check, without touching any other settings (debug mode,
- * custom config paths, ledger interval, image, etc.).
- *
- * Throws if the compose file is missing or has no entrypoint line — restore
- * cannot proceed without a working entrypoint that reads .restore-hash.
+ * Verify that the compose file exists and contains an entrypoint line that can
+ * be patched. Called before any destructive operations so restore fails early
+ * rather than leaving the sandbox in a half-restored state.
  */
-function patchComposeEntrypoint(): void {
+function assertComposeHasEntrypoint(): void {
   if (!fs.existsSync(COMPOSE_FILE)) {
     throw new Error(
       `Compose file not found at ${COMPOSE_FILE}.\n` +
       `  Start the sandbox first: xrpl-up node --local --persist --detach`
     );
   }
+  const content = fs.readFileSync(COMPOSE_FILE, 'utf-8');
+  if (!/^\s+entrypoint:/m.test(content)) {
+    throw new Error(
+      `Compose file has no entrypoint line — was the sandbox started with --persist?\n` +
+      `  Restart with: xrpl-up node --local --persist --detach`
+    );
+  }
+}
 
+/**
+ * Patch the rippled entrypoint line in the existing compose file so it includes
+ * the .restore-hash check, without touching any other settings (debug mode,
+ * custom config paths, ledger interval, image, etc.).
+ *
+ * Caller must run assertComposeHasEntrypoint() first to guarantee this succeeds.
+ */
+function patchComposeEntrypoint(): void {
   const RIPPLED_BIN = '/opt/ripple/bin/rippled';
   const RIPPLED_CFG = '--conf /config/rippled.cfg';
   const HASH_FILE   = '/var/lib/rippled/db/.restore-hash';
   const newEntrypoint =
     `    entrypoint: ["/bin/sh", "-c", ` +
-    `"if [ -f ${HASH_FILE} ]; then HASH=$$(cat ${HASH_FILE}); rm -f ${HASH_FILE}; ` +
+    `"if [ -f ${HASH_FILE} ]; then HASH=$$(cat ${HASH_FILE}); ` +
     `exec ${RIPPLED_BIN} ${RIPPLED_CFG} -a --ledger $$HASH; ` +
     `else exec ${RIPPLED_BIN} ${RIPPLED_CFG} -a --start; fi"]`;
 
   const content = fs.readFileSync(COMPOSE_FILE, 'utf-8');
   const patched = content.replace(/^\s+entrypoint:.*$/m, newEntrypoint);
-  if (patched === content) {
-    throw new Error(
-      `Could not patch compose entrypoint — no entrypoint line found.\n` +
-      `  The sandbox was not started with --persist. Restart with:\n` +
-      `  xrpl-up node --local --persist --detach`
-    );
-  }
   fs.writeFileSync(COMPOSE_FILE, patched, 'utf-8');
 }
 
@@ -103,8 +109,8 @@ export async function snapshotSave(name: string): Promise<void> {
 
   if (fs.existsSync(dest)) {
     logger.warning(`Snapshot "${name}" already exists — overwriting.`);
-    // Remove all artifacts atomically so a partial save cannot leave a new
-    // tarball paired with stale metadata or account sidecar from the old save.
+    // Remove all artifacts so a partial save cannot leave a new tarball
+    // paired with stale metadata or account sidecar from the old save.
     for (const f of [dest, walletSidecarPath(name), metaSidecarPath(name)]) {
       if (fs.existsSync(f)) fs.unlinkSync(f);
     }
@@ -113,7 +119,7 @@ export async function snapshotSave(name: string): Promise<void> {
   logger.blank();
 
   // Wait until all wallet store accounts are confirmed on-chain before
-  // stopping rippled. With --detach, the faucet funds accounts asynchronously
+  // snapshotting. With --detach, the faucet funds accounts asynchronously
   // after node start, so a single ledger_accept is not enough — we poll until
   // every address in the wallet store responds to account_info.
   const walletAccounts = new WalletStore('local').all();
@@ -158,7 +164,7 @@ export async function snapshotSave(name: string): Promise<void> {
     try {
       const lc = await (client as any).request({ command: 'ledger_closed' });
       ledgerHash = lc.result.ledger_hash ?? null;
-    } catch { /* not fatal — restore will warn if hash is missing */ }
+    } catch { /* not fatal — restore will reject if hash is missing */ }
 
     await client.disconnect();
 
@@ -198,35 +204,41 @@ export async function snapshotSave(name: string): Promise<void> {
     );
   }
 
-  // Tar the volume via an alpine sidecar (rippled is still running — online backup)
+  // Write tar to a temp name, write sidecars, then rename. This way a partial
+  // save (e.g. crash during tar) never leaves a dest tarball without matching
+  // metadata — the old snapshot set remains intact until the rename succeeds.
+  const tmpDest = dest + '.tmp';
   const saveSpinner = ora({ text: chalk.dim(`Saving snapshot "${name}"…`), prefixText: ' ' }).start();
   try {
     execSync(
       `docker run --rm ` +
       `-v ${VOLUME_NAME}:/data ` +
       `-v "${SNAPSHOTS_DIR}":/snapshots ` +
-      `alpine tar czf /snapshots/${name}.tar.gz -C /data .`,
+      `alpine tar czf /snapshots/${path.basename(tmpDest)} -C /data .`,
       { stdio: 'ignore' }
     );
-    saveSpinner.succeed(chalk.green(`Snapshot "${name}" saved`));
   } catch (err) {
     saveSpinner.fail(`Failed to save snapshot "${name}"`);
+    if (fs.existsSync(tmpDest)) fs.unlinkSync(tmpDest);
     startService('faucet');
     throw err;
   }
 
-  // Save WalletStore sidecar so restore can roll it back together with the ledger
+  // Write sidecars before renaming tar so the set is complete when dest appears.
   const sidecar = walletSidecarPath(name);
   if (fs.existsSync(WALLET_STORE_PATH)) {
     fs.copyFileSync(WALLET_STORE_PATH, sidecar);
   } else {
     fs.writeFileSync(sidecar, '[]');
   }
-
-  // Save ledger hash metadata so restore can start rippled with --ledger <hash>
   if (ledgerHash) {
     fs.writeFileSync(metaSidecarPath(name), JSON.stringify({ ledger_hash: ledgerHash }));
   }
+
+  // Atomic rename — if this fails the sidecars exist but no tar at dest,
+  // so listSnapshotNames() will not list it (it filters on .tar.gz).
+  fs.renameSync(tmpDest, dest);
+  saveSpinner.succeed(chalk.green(`Snapshot "${name}" saved`));
 
   // Restart faucet only
   const startSpinner = ora({ text: chalk.dim('Resuming faucet…'), prefixText: ' ' }).start();
@@ -264,8 +276,8 @@ export async function snapshotRestore(name: string): Promise<void> {
     );
   }
 
-  // Read the ledger hash saved during snapshot save. Without this hash, rippled
-  // cannot locate the ledger in NuDB (standalone mode has no SQLite ledger index).
+  // ── Pre-flight checks (all before any destructive operations) ────────────
+  // 1. Ledger hash required — without it rippled cannot find the ledger in NuDB.
   const metaPath = metaSidecarPath(name);
   let ledgerHash: string | null = null;
   if (fs.existsSync(metaPath)) {
@@ -274,7 +286,6 @@ export async function snapshotRestore(name: string): Promise<void> {
       ledgerHash = meta.ledger_hash ?? null;
     } catch { /* treat as missing */ }
   }
-
   if (!ledgerHash) {
     throw new Error(
       `Snapshot "${name}" has no ledger hash and cannot be restored.\n` +
@@ -283,8 +294,12 @@ export async function snapshotRestore(name: string): Promise<void> {
     );
   }
 
+  // 2. Compose file must have an entrypoint line we can patch.
+  assertComposeHasEntrypoint();
+
   logger.blank();
 
+  // ── Destructive operations start here ────────────────────────────────────
   // Stop faucet then rippled (faucet must stop first to avoid crashing on disconnect)
   const stopSpinner = ora({ text: chalk.dim('Pausing sandbox…'), prefixText: ' ' }).start();
   try {
@@ -300,19 +315,17 @@ export async function snapshotRestore(name: string): Promise<void> {
   }
 
   // Wipe and restore the volume via alpine sidecar, then write the ledger hash
-  // to .restore-hash. The rippled entrypoint reads this file and starts with
-  // --ledger <hash> to load directly from NuDB (the only resume path in
-  // standalone mode — rippled does not maintain a SQLite ledger index).
+  // to .restore-hash. The entrypoint reads this file and starts rippled with
+  // --ledger <hash> to load directly from NuDB. The file is kept (not deleted
+  // by the entrypoint) so that Docker crash-restarts also resume from the
+  // snapshot rather than falling back to --start (fresh genesis).
   const restoreSpinner = ora({ text: chalk.dim(`Restoring snapshot "${name}"…`), prefixText: ' ' }).start();
   try {
-    const hashStep = ledgerHash
-      ? `; echo '${ledgerHash}' > /data/.restore-hash`
-      : '';
     execSync(
       `docker run --rm ` +
       `-v ${VOLUME_NAME}:/data ` +
       `-v "${SNAPSHOTS_DIR}":/snapshots ` +
-      `alpine sh -c "rm -rf /data/* /data/..?* /data/.[!.]* 2>/dev/null; tar xzf /snapshots/${name}.tar.gz -C /data${hashStep}"`,
+      `alpine sh -c "rm -rf /data/* /data/..?* /data/.[!.]* 2>/dev/null; tar xzf /snapshots/${name}.tar.gz -C /data; echo '${ledgerHash}' > /data/.restore-hash"`,
       { stdio: 'ignore' }
     );
     restoreSpinner.succeed(chalk.green(`Snapshot "${name}" restored`));
@@ -332,8 +345,8 @@ export async function snapshotRestore(name: string): Promise<void> {
   }
 
   // Patch only the entrypoint line in the existing compose file so the
-  // .restore-hash check is present, without disturbing any other settings
-  // (debug mode, custom config paths, ledger interval, etc.).
+  // .restore-hash check is present. assertComposeHasEntrypoint() already
+  // verified the line exists, so this is guaranteed to apply.
   patchComposeEntrypoint();
 
   // Restart rippled first and wait for it to be ready before starting the faucet.
