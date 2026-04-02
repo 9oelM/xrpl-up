@@ -123,23 +123,24 @@ export async function snapshotSave(name: string): Promise<void> {
     );
   }
 
-  // Stop faucet only — rippled keeps running so its NuDB data stays consistent.
-  // rippled's --start flag always creates a fresh genesis on restart, so we
-  // never stop it during a save. An online backup (tar while running) is safe
-  // for NuDB: NuDB is append-only and all validated ledger data is committed.
-  const stopSpinner = ora({ text: chalk.dim('Pausing faucet…'), prefixText: ' ' }).start();
+  // Stop faucet then rippled so SQLite WAL is checkpointed cleanly on shutdown.
+  // A clean shutdown flushes the WAL into the main .db file, making the
+  // snapshot consistent for restore. Faucet must stop first to avoid crashing
+  // on disconnect from rippled.
+  const stopSpinner = ora({ text: chalk.dim('Pausing sandbox…'), prefixText: ' ' }).start();
   try {
     stopService('faucet');
-    stopSpinner.succeed(chalk.dim('Faucet paused'));
+    stopService('rippled');
+    stopSpinner.succeed(chalk.dim('Sandbox paused'));
   } catch {
-    stopSpinner.fail('Failed to stop faucet — is the sandbox running?');
+    stopSpinner.fail('Failed to stop sandbox — is it running?');
     throw new Error(
-      'Could not stop faucet. Is the sandbox running?\n' +
+      'Could not stop sandbox. Is it running?\n' +
       '  Start with: xrpl-up node --local --persist'
     );
   }
 
-  // Tar the volume via an alpine sidecar (rippled is still running)
+  // Tar the volume via an alpine sidecar (both services are stopped — SQLite is consistent)
   const saveSpinner = ora({ text: chalk.dim(`Saving snapshot "${name}"…`), prefixText: ' ' }).start();
   try {
     execSync(
@@ -152,6 +153,8 @@ export async function snapshotSave(name: string): Promise<void> {
     saveSpinner.succeed(chalk.green(`Snapshot "${name}" saved`));
   } catch (err) {
     saveSpinner.fail(`Failed to save snapshot "${name}"`);
+    // Try to restart both services even on failure
+    startService('rippled');
     startService('faucet');
     throw err;
   }
@@ -164,11 +167,13 @@ export async function snapshotSave(name: string): Promise<void> {
     fs.writeFileSync(sidecar, '[]');
   }
 
-  // Restart faucet only
-  const startSpinner = ora({ text: chalk.dim('Resuming faucet…'), prefixText: ' ' }).start();
+  // Restart rippled first and wait for it to be ready before starting the faucet.
+  const startSpinner = ora({ text: chalk.dim('Resuming sandbox…'), prefixText: ' ' }).start();
+  startService('rippled');
+  await waitForPort(LOCAL_WS_PORT, 30_000, 'rippled WebSocket');
   startService('faucet');
   await waitForPort(FAUCET_PORT, 30_000, 'faucet HTTP');
-  startSpinner.succeed(chalk.dim('Faucet resumed'));
+  startSpinner.succeed(chalk.dim('Sandbox resumed'));
 
   // Show file size
   const stats = fs.statSync(dest);
@@ -216,14 +221,17 @@ export async function snapshotRestore(name: string): Promise<void> {
     );
   }
 
-  // Wipe and restore the volume via alpine sidecar
+  // Wipe and restore the volume via alpine sidecar.
+  // After extraction, delete any SQLite WAL/SHM files — these are left over
+  // from an online backup and are inconsistent without the corresponding
+  // in-memory state. rippled re-creates them on startup from the main .db file.
   const restoreSpinner = ora({ text: chalk.dim(`Restoring snapshot "${name}"…`), prefixText: ' ' }).start();
   try {
     execSync(
       `docker run --rm ` +
       `-v ${VOLUME_NAME}:/data ` +
       `-v "${SNAPSHOTS_DIR}":/snapshots ` +
-      `alpine sh -c "rm -rf /data/* /data/..?* /data/.[!.]* 2>/dev/null; tar xzf /snapshots/${name}.tar.gz -C /data"`,
+      `alpine sh -c "rm -rf /data/* /data/..?* /data/.[!.]* 2>/dev/null; tar xzf /snapshots/${name}.tar.gz -C /data; rm -f /data/*.db-shm /data/*.db-wal"`,
       { stdio: 'ignore' }
     );
     restoreSpinner.succeed(chalk.green(`Snapshot "${name}" restored`));

@@ -334,7 +334,7 @@ export function writeComposeFile(image = DEFAULT_IMAGE, persist = false, debug =
   const entrypointLine = noRestart
     ? `\n    entrypoint: ["/bin/sh", "-c", "${RIPPLED_BIN} ${RIPPLED_CFG} -a --start 2>/tmp/rip.err & RPID=$! ; wait $RPID ; EC=$? ; cat /tmp/rip.err >&2 ; grep -qF Logic\\ error: /tmp/rip.err 2>/dev/null && exit 134 ; exit $EC"]`
     : persist
-      ? `\n    entrypoint: ["/bin/sh", "-c", "if [ -d ${NUDB_DIR} ] && ls ${NUDB_DIR}/ | grep -q .; then exec ${RIPPLED_BIN} ${RIPPLED_CFG} -a --load; else exec ${RIPPLED_BIN} ${RIPPLED_CFG} -a --start; fi"]`
+      ? `\n    entrypoint: ["/bin/sh", "-c", "if [ -d ${NUDB_DIR} ] && ls ${NUDB_DIR}/ | grep -q .; then exec ${RIPPLED_BIN} ${RIPPLED_CFG} -a; else exec ${RIPPLED_BIN} ${RIPPLED_CFG} -a --start; fi"]`
       : '';
   const commandLine = (noRestart || persist)
     ? ''  // entrypoint already contains the full rippled invocation
