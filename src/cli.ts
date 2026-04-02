@@ -73,8 +73,7 @@ program
   .description('Start an XRPL sandbox with pre-funded accounts')
   .option(
     '--network <network>',
-    'Network to connect to (testnet | devnet)',
-    'testnet'
+    'Network to connect to (testnet | devnet) — omit to run locally'
   )
   .option(
     '-a, --accounts <number>',
@@ -144,7 +143,7 @@ program
     'Bypass the wrapper entrypoint so the container exits with rippled\'s code when it crashes (useful for observing exit code 134 on SIGABRT)'
   )
   .action((opts: {
-    network: string;
+    network?: string;
     accounts?: string;
     local?: boolean;
     persist?: boolean;
@@ -162,10 +161,11 @@ program
     exitOnCrash?: boolean;
     config?: string;
   }) => {
+    const isLocal = opts.local || !opts.network || opts.network === 'local';
     nodeCommand({
-      network: opts.local ? undefined : opts.network,
+      network: isLocal ? undefined : opts.network,
       accountCount: opts.accounts !== undefined ? parseInt(opts.accounts, 10) : undefined,
-      local: opts.local,
+      local: isLocal,
       persist: opts.persist,
       image: opts.image,
       ledgerInterval: parseInt(opts.ledgerInterval, 10),
@@ -187,22 +187,23 @@ program
 program
   .command('accounts')
   .description('List sandbox accounts and their live XRP balances')
-  .option('--network <network>', 'Network', 'testnet')
+  .option('--network <network>', 'Network (testnet | devnet | mainnet) — omit for local sandbox')
   .option('--local', 'Show accounts for the local Docker sandbox')
   .option('--address <address>', 'Query a specific address directly (bypasses wallet store)')
-  .action((opts: { network: string; local?: boolean; address?: string }) => {
-    accountsCommand({ network: opts.network, local: opts.local, address: opts.address }).catch(handleError);
+  .action((opts: { network?: string; local?: boolean; address?: string }) => {
+    const local = opts.local ?? !opts.network;
+    accountsCommand({ network: opts.network, local, address: opts.address }).catch(handleError);
   });
 
 // ── faucet ────────────────────────────────────────────────────────────────────
 program
   .command('faucet')
   .description('Fund an account using the faucet')
-  .option('--network <network>', 'Network: local | testnet | devnet', 'testnet')
+  .option('--network <network>', 'Network: local | testnet | devnet — omit for local')
   .option('--local', '[deprecated] Alias for --network local')
   .option('-s, --seed <seed>', 'Wallet seed to fund (omit to generate a new wallet)')
-  .action((opts: { network: string; local?: boolean; seed?: string }) => {
-    const network = opts.local ? 'local' : opts.network;
+  .action((opts: { network?: string; local?: boolean; seed?: string }) => {
+    const network = opts.local ? 'local' : (opts.network ?? 'local');
     faucetCommand({ network, seed: opts.seed }).catch(handleError);
   });
 
@@ -210,10 +211,10 @@ program
 program
   .command('run <script> [scriptArgs...]')
   .description('Run a TypeScript/JavaScript script against an XRPL network')
-  .option('--network <network>', 'Network: local | testnet | devnet | mainnet', 'testnet')
+  .option('--network <network>', 'Network: local | testnet | devnet | mainnet — omit for local')
   .option('--local', 'Alias for --network local')
-  .action((script: string, scriptArgs: string[], opts: { network: string; local?: boolean }) => {
-    const network = opts.local ? 'local' : opts.network;
+  .action((script: string, scriptArgs: string[], opts: { network?: string; local?: boolean }) => {
+    const network = opts.local ? 'local' : (opts.network ?? 'local');
     runCommand({ script, network, scriptArgs }).catch(handleError);
   });
 
@@ -318,11 +319,12 @@ amendment
   .command('list')
   .description('List all amendments and their status')
   .option('--local', 'Use the local Docker sandbox')
-  .option('--network <network>', 'Network to query', 'testnet')
+  .option('--network <network>', 'Network to query (testnet | devnet | mainnet) — omit for local')
   .option('--diff <network>', 'Compare against another network (e.g. --diff mainnet)')
   .option('--disabled', 'Show only disabled amendments')
-  .action((opts: { local?: boolean; network: string; diff?: string; disabled?: boolean }) => {
-    amendmentListCommand({ local: opts.local, network: opts.network, diff: opts.diff, disabled: opts.disabled })
+  .action((opts: { local?: boolean; network?: string; diff?: string; disabled?: boolean }) => {
+    const local = opts.local ?? !opts.network;
+    amendmentListCommand({ local, network: opts.network, diff: opts.diff, disabled: opts.disabled })
       .catch(handleError);
   });
 
@@ -330,9 +332,10 @@ amendment
   .command('info <nameOrHash>')
   .description('Show details for a single amendment (look up by name or hash prefix)')
   .option('--local', 'Use the local Docker sandbox')
-  .option('--network <network>', 'Network to query', 'testnet')
-  .action((nameOrHash: string, opts: { local?: boolean; network: string }) => {
-    amendmentInfoCommand(nameOrHash, { local: opts.local, network: opts.network })
+  .option('--network <network>', 'Network to query (testnet | devnet | mainnet) — omit for local')
+  .action((nameOrHash: string, opts: { local?: boolean; network?: string }) => {
+    const local = opts.local ?? !opts.network;
+    amendmentInfoCommand(nameOrHash, { local, network: opts.network })
       .catch(handleError);
   });
 
@@ -382,6 +385,14 @@ program.addCommand(clawbackCommand);
 function handleError(err: unknown): void {
   const msg = err instanceof Error ? err.message : String(err);
   console.error('\n  ' + msg);
+  const isLocalFail = /ECONNREFUSED|WebSocket.*clos|connect.*fail/i.test(msg)
+    && /(localhost|127\.0\.0\.1|:6006)/.test(msg);
+  if (isLocalFail) {
+    console.error('\n  Local XRPL node is not running.');
+    console.error('  Start it:              xrpl-up node --detach');
+    console.error('  Or target a network:   xrpl-up <sandbox-cmd> --network testnet');
+    console.error('                         xrpl-up <xrpl-cmd> -n testnet');
+  }
   process.exit(1);
 }
 

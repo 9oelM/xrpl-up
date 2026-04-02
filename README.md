@@ -32,26 +32,26 @@ npm link
 xrpl-up init my-project
 cd my-project && npm install
 
-# Start a local sandbox with 10 pre-funded accounts
-xrpl-up node --local
+# Start a local sandbox with 10 pre-funded accounts (local is the default)
+xrpl-up node
 
 # In another terminal — list accounts with live balances
-xrpl-up accounts --local
+xrpl-up accounts
 
 # Run a script against the local sandbox
 xrpl-up run scripts/example-payment.ts
 
-# Create an AMM pool in one command
-xrpl-up amm create XRP USD --local
+# Create an AMM pool in one command (local by default)
+xrpl-up amm create XRP USD
 
 # Mint a transferable NFT
-xrpl-up nft mint --local --uri https://example.com/meta.json --transferable
+xrpl-up nft mint --uri https://example.com/meta.json --transferable
 
 # Create an MPT issuance (Multi-Purpose Token)
 xrpl-up mptoken issuance create --node ws://localhost:6006 --max-amount 1000000 --asset-scale 6
 
 # Open a payment channel
-xrpl-up channel create rDestination... 10 --local
+xrpl-up channel create rDestination... 10
 ```
 
 ---
@@ -73,37 +73,37 @@ All XRPL interaction commands accept a global `--node` option that sets the netw
 
 | Value | Connects to |
 |-------|-------------|
-| `testnet` (default) | XRPL Testnet |
+| `local` (default) | Local sandbox (`ws://localhost:6006`) |
+| `testnet` | XRPL Testnet |
 | `devnet` | XRPL Devnet |
 | `mainnet` | XRPL Mainnet (caution) |
-| `ws://localhost:6006` | Local sandbox started with `xrpl-up node --local` |
 
 ```bash
-# Use local sandbox (start first with: xrpl-up node --local)
-xrpl-up account info rMyAddress --node ws://localhost:6006
+# Use local sandbox (default — start first with: xrpl-up node)
+xrpl-up account info rMyAddress
 
-# Use testnet (default)
-xrpl-up wallet fund --account rMyAddress
+# Use testnet
+xrpl-up wallet fund --account rMyAddress -n testnet
 
 # Set via environment variable
 export XRPL_NODE=ws://localhost:6006
 xrpl-up payment --to rDest --amount 10
 ```
 
-`--node` only applies to XRPL interaction commands; sandbox lifecycle commands (`node`, `stop`, `reset`, etc.) use their own `--local` / `--network` flags.
+`--node` only applies to XRPL interaction commands; sandbox lifecycle commands (`node`, `stop`, `reset`, etc.) use `--network` to target remote networks (also default to local when omitted).
 
 ### `xrpl-up node`
 
 Starts a sandbox environment and funds accounts. Supports a fully local rippled node (via Docker) or a connection to XRPL Testnet/Devnet.
 
 ```bash
-# Local Docker sandbox (recommended)
-xrpl-up node --local
+# Start local Docker sandbox (default — no flag needed)
+xrpl-up node
 
-# Connect to Testnet
+# Connect to Testnet instead
 xrpl-up node --network testnet
 
-# Connect to Devnet
+# Connect to Devnet instead
 xrpl-up node --network devnet
 ```
 
@@ -123,7 +123,7 @@ xrpl-up node --network devnet
 | `--exit-on-crash` | — | Exit with code 134 when rippled crashes (SIGABRT); disables container auto-restart |
 | `-a, --accounts <n>` | `10` | Number of accounts to pre-fund |
 
-**What `xrpl-up node --local` does:**
+**What `xrpl-up node` does (local mode):**
 
 1. Generates `rippled.cfg` and `docker-compose.yml` in `~/.xrpl-up/`
 2. Starts rippled in standalone mode (no peers, no sync, no internet required)
@@ -177,11 +177,11 @@ What `xrpl-up reset` removes:
 Lists funded accounts with their live XRP balances.
 
 ```bash
-xrpl-up accounts --local
+xrpl-up accounts                          # local (default)
 xrpl-up accounts --network testnet
 
 # Query any address directly
-xrpl-up accounts --local --address rSomeAddress...
+xrpl-up accounts --address rSomeAddress...
 ```
 
 ---
@@ -191,18 +191,17 @@ xrpl-up accounts --local --address rSomeAddress...
 Funds a new or existing account via the local sandbox faucet or a public testnet/devnet faucet. Funded accounts are automatically saved to `~/.xrpl-up/{network}-accounts.json` so they appear in `xrpl-up accounts`.
 
 ```bash
-# Generate and fund a new wallet on the local sandbox
-xrpl-up faucet --network local
+# Generate and fund a new wallet on the local sandbox (default)
+xrpl-up faucet
 
 # Fund an existing wallet by seed on the local sandbox
-xrpl-up faucet --network local --seed sn3nxiW7v8KXzPzAqzyHXbSSKNuN9
+xrpl-up faucet --seed sn3nxiW7v8KXzPzAqzyHXbSSKNuN9
 
 # Use the public Testnet faucet
 xrpl-up faucet --network testnet
 ```
 
-> `--local` is accepted as a backward-compatible alias for `--network local`.
-> Faucet targets supported by this command: `local`, `testnet`, `devnet`.
+> Faucet targets supported by this command: `local` (default), `testnet`, `devnet`.
 
 ---
 
@@ -211,7 +210,7 @@ xrpl-up faucet --network testnet
 Shows rippled server info and faucet health.
 
 ```bash
-xrpl-up status --local
+xrpl-up status                     # local (default)
 xrpl-up status --network testnet
 ```
 
@@ -246,7 +245,7 @@ async function main() {
   const client = new Client(process.env.XRPL_NETWORK_URL!);
   await client.connect();
 
-  const sender = Wallet.fromSeed('sn3nxiW7v8KXzPzAqzyHXbSSKNuN9'); // from xrpl-up accounts --local
+  const sender = Wallet.fromSeed('sn3nxiW7v8KXzPzAqzyHXbSSKNuN9'); // from xrpl-up accounts
 
   await client.submitAndWait(
     {
