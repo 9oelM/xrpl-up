@@ -4,7 +4,8 @@ import path from 'node:path';
 import os from 'node:os';
 import chalk from 'chalk';
 import ora from 'ora';
-import { stopService, startService, waitForPort, LOCAL_WS_PORT, FAUCET_PORT } from '../core/compose';
+import { Client } from 'xrpl';
+import { stopService, startService, waitForPort, LOCAL_WS_PORT, LOCAL_WS_URL, FAUCET_PORT } from '../core/compose';
 import { logger } from '../utils/logger';
 
 const VOLUME_NAME = 'xrpl-up-local-db';
@@ -60,6 +61,19 @@ export async function snapshotSave(name: string): Promise<void> {
   }
 
   logger.blank();
+
+  // Force a ledger close so any pending transactions (e.g. initial account
+  // funding) are confirmed before we snapshot the volume.
+  const flushSpinner = ora({ text: chalk.dim('Flushing pending transactions…'), prefixText: ' ' }).start();
+  try {
+    const client = new Client(LOCAL_WS_URL);
+    await client.connect();
+    await (client as any).request({ command: 'ledger_accept' });
+    await client.disconnect();
+    flushSpinner.succeed(chalk.dim('Ledger flushed'));
+  } catch {
+    flushSpinner.warn(chalk.dim('Could not flush ledger — continuing anyway'));
+  }
 
   // Stop faucet then rippled to quiesce NuDB file locks before copying.
   // Faucet must stop first — its WebSocket to rippled would otherwise crash it.
