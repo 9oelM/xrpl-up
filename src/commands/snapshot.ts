@@ -123,22 +123,23 @@ export async function snapshotSave(name: string): Promise<void> {
     );
   }
 
-  // Stop faucet then rippled to quiesce NuDB file locks before copying.
-  // Faucet must stop first — its WebSocket to rippled would otherwise crash it.
-  const stopSpinner = ora({ text: chalk.dim('Pausing sandbox…'), prefixText: ' ' }).start();
+  // Stop faucet only — rippled keeps running so its NuDB data stays consistent.
+  // rippled's --start flag always creates a fresh genesis on restart, so we
+  // never stop it during a save. An online backup (tar while running) is safe
+  // for NuDB: NuDB is append-only and all validated ledger data is committed.
+  const stopSpinner = ora({ text: chalk.dim('Pausing faucet…'), prefixText: ' ' }).start();
   try {
     stopService('faucet');
-    stopService('rippled');
-    stopSpinner.succeed(chalk.dim('Sandbox paused'));
+    stopSpinner.succeed(chalk.dim('Faucet paused'));
   } catch {
-    stopSpinner.fail('Failed to stop sandbox — is it running?');
+    stopSpinner.fail('Failed to stop faucet — is the sandbox running?');
     throw new Error(
-      'Could not stop sandbox. Is it running?\n' +
+      'Could not stop faucet. Is the sandbox running?\n' +
       '  Start with: xrpl-up node --local --persist'
     );
   }
 
-  // Tar the volume via an alpine sidecar
+  // Tar the volume via an alpine sidecar (rippled is still running)
   const saveSpinner = ora({ text: chalk.dim(`Saving snapshot "${name}"…`), prefixText: ' ' }).start();
   try {
     execSync(
@@ -151,8 +152,6 @@ export async function snapshotSave(name: string): Promise<void> {
     saveSpinner.succeed(chalk.green(`Snapshot "${name}" saved`));
   } catch (err) {
     saveSpinner.fail(`Failed to save snapshot "${name}"`);
-    // Try to restart both services even on failure
-    startService('rippled');
     startService('faucet');
     throw err;
   }
@@ -165,13 +164,11 @@ export async function snapshotSave(name: string): Promise<void> {
     fs.writeFileSync(sidecar, '[]');
   }
 
-  // Restart rippled then faucet, and wait for both to be ready
-  const startSpinner = ora({ text: chalk.dim('Resuming sandbox…'), prefixText: ' ' }).start();
-  startService('rippled');
+  // Restart faucet only
+  const startSpinner = ora({ text: chalk.dim('Resuming faucet…'), prefixText: ' ' }).start();
   startService('faucet');
-  await waitForPort(LOCAL_WS_PORT, 30_000, 'rippled WebSocket');
   await waitForPort(FAUCET_PORT, 30_000, 'faucet HTTP');
-  startSpinner.succeed(chalk.dim('Sandbox resumed'));
+  startSpinner.succeed(chalk.dim('Faucet resumed'));
 
   // Show file size
   const stats = fs.statSync(dest);
