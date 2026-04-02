@@ -324,14 +324,19 @@ export function writeComposeFile(image = DEFAULT_IMAGE, persist = false, debug =
   // `restart: "no"` prevents Docker from recycling the exited container.
   const restartLine = noRestart ? '\n    restart: "no"' : '';
 
-  // rippled's --start flag creates genesis only if no ledger data exists; if
-  // NuDB already has data it loads from it. Safe to use on every restart.
+  // In persist mode rippled must NOT receive --start on restart — that flag
+  // always creates a fresh genesis even when the NuDB volume has data.
+  // Use a shell entrypoint that passes --start only on first boot (empty NuDB)
+  // and --load on subsequent boots so rippled resumes from the existing ledger.
   const RIPPLED_BIN = '/opt/ripple/bin/rippled';
   const RIPPLED_CFG = '--conf /config/rippled.cfg';
+  const NUDB_DIR    = '/var/lib/rippled/db/nudb';
   const entrypointLine = noRestart
     ? `\n    entrypoint: ["/bin/sh", "-c", "${RIPPLED_BIN} ${RIPPLED_CFG} -a --start 2>/tmp/rip.err & RPID=$! ; wait $RPID ; EC=$? ; cat /tmp/rip.err >&2 ; grep -qF Logic\\ error: /tmp/rip.err 2>/dev/null && exit 134 ; exit $EC"]`
-    : '';
-  const commandLine = noRestart
+    : persist
+      ? `\n    entrypoint: ["/bin/sh", "-c", "if [ -d ${NUDB_DIR} ] && ls ${NUDB_DIR}/ | grep -q .; then exec ${RIPPLED_BIN} ${RIPPLED_CFG} -a --load; else exec ${RIPPLED_BIN} ${RIPPLED_CFG} -a --start; fi"]`
+      : '';
+  const commandLine = (noRestart || persist)
     ? ''  // entrypoint already contains the full rippled invocation
     : '\n    command: ["-a", "--start"]';
 
