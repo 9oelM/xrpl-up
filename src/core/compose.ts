@@ -651,6 +651,8 @@ export async function composeUp(image = DEFAULT_IMAGE, noConsensus = false, debu
   // + amendment activation. Restart with --load: ~10-15s.
   if (!noConsensus) {
     await waitForConsensus(120_000);
+    // Check ledger clock drift and warn if significant
+    await warnIfDrifted();
   }
 
   await waitForPort(FAUCET_PORT, 30_000, 'faucet HTTP');
@@ -682,6 +684,34 @@ export function isConsensusMode(): boolean {
  * The [amendments] config controls which amendments are voted on, not
  * which are force-enabled at genesis (that only works in standalone mode).
  */
+/**
+ * Measure ledger clock drift and warn if > 3 seconds.
+ * Uses the `ledger` RPC (server_info does not include close_time).
+ */
+async function warnIfDrifted(): Promise<void> {
+  const RIPPLE_EPOCH = 946684800;
+  try {
+    const { Client } = await import('xrpl');
+    const client = new Client(LOCAL_WS_URL, { timeout: 5_000 });
+    await client.connect();
+    const res = await client.request({ command: 'ledger', ledger_index: 'validated' } as any);
+    const closeTime = (res.result as any)?.ledger?.close_time;
+    await client.disconnect();
+    if (typeof closeTime === 'number') {
+      const wallRipple = Math.floor(Date.now() / 1000) - RIPPLE_EPOCH;
+      const drift = closeTime - wallRipple;
+      if (Math.abs(drift) > 3) {
+        console.log(
+          `  ⚠ Ledger clock drift: ${drift > 0 ? '+' : ''}${drift}s from wall clock. ` +
+          `Time-sensitive transactions (escrow, checks) should use timestamps ≥30s in the future.`
+        );
+      }
+    }
+  } catch {
+    // best effort — don't block startup
+  }
+}
+
 async function waitForConsensus(timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   const { Client } = await import('xrpl');
