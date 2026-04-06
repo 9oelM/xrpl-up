@@ -107,7 +107,7 @@ export async function setup(): Promise<void> {
     [CLI, "start", "--local", "--local-network", "--detach"],
     {
       encoding: "utf-8",
-      timeout: 120_000,
+      timeout: 300_000,   // consensus bootstrap: up to ~240s for amendment activation + faucet
       env: { ...process.env },
     },
   );
