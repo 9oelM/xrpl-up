@@ -1243,13 +1243,14 @@ Standalone mode (the default) is recommended for CI — it starts in seconds, ha
 ```yaml
 # .github/workflows/test.yml
 steps:
+  - run: docker pull xrpllabsofficial/xrpld:latest
   - run: xrpl-up start --local --detach
   - run: npm test
   - run: xrpl-up stop
     if: always()
 ```
 
-The faucet server handles ledger auto-advance while the sandbox runs in the background.
+> **Tip:** Pre-pull the Docker image as a separate step. The first `xrpl-up start` on a fresh machine pulls ~1 GB — an explicit `docker pull` keeps this visible and out of the sandbox startup time.
 
 ---
 
