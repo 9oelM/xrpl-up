@@ -631,6 +631,25 @@ async function waitForConsensus(timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   const { Client } = await import('xrpl');
 
+  // Collect the amendment hashes we configured in [amendments] so we only
+  // wait for those to be enabled. The Docker image may know about newer
+  // amendments not in our config — those will be supported but not enabled,
+  // and that's fine (they won't cause temDISABLED for configured features).
+  const configuredHashes = new Set<string>();
+  try {
+    const cfgPath = fs.existsSync(RIPPLED_CFG_FILE_NODE1) ? RIPPLED_CFG_FILE_NODE1 : RIPPLED_CFG_FILE;
+    const cfg = fs.readFileSync(cfgPath, 'utf-8');
+    const amendmentsMatch = cfg.match(/\[amendments\]\n([\s\S]*?)(?:\n\[|$)/);
+    if (amendmentsMatch) {
+      for (const line of amendmentsMatch[1].split('\n')) {
+        const hash = line.trim().split(/\s+/)[0];
+        if (hash && /^[0-9A-Fa-f]{64}$/.test(hash)) {
+          configuredHashes.add(hash.toUpperCase());
+        }
+      }
+    }
+  } catch { /* fall back to just checking validated ledger */ }
+
   while (Date.now() < deadline) {
     let client: InstanceType<typeof Client> | null = null;
     try {
@@ -644,16 +663,26 @@ async function waitForConsensus(timeoutMs: number): Promise<void> {
       const state = info?.server_state ?? '';
 
       if (seq > 0 && (state === 'proposing' || state === 'full')) {
-        // Phase 2: all amendments enabled
-        // The `feature` response has { result: { <hash>: { name, enabled, supported }, status: "success" } }
-        // Filter to only amendment entries (objects with an `enabled` property).
+        // If we don't know which amendments to check, just accept seq > 0
+        if (configuredHashes.size === 0) {
+          await client.disconnect();
+          return;
+        }
+
+        // Phase 2: all configured amendments enabled
         const featureRes = await client.request({ command: 'feature' } as any);
         const result = (featureRes.result as any) ?? {};
-        const amendments = Object.values(result).filter(
-          (f: any) => typeof f === 'object' && f !== null && 'enabled' in f
-        );
 
-        if (amendments.length > 0 && amendments.every((f: any) => f.enabled === true)) {
+        let allConfiguredEnabled = true;
+        for (const hash of configuredHashes) {
+          const entry = result[hash];
+          if (entry && typeof entry === 'object' && entry.enabled !== true) {
+            allConfiguredEnabled = false;
+            break;
+          }
+        }
+
+        if (allConfiguredEnabled) {
           await client.disconnect();
           return;
         }
