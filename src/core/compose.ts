@@ -616,6 +616,20 @@ export function isConsensusMode(): boolean {
  * Poll rippled server_info until a validated ledger exists, indicating the
  * 2-node consensus network has started closing ledgers.
  */
+/**
+ * Wait for the 2-node consensus network to produce validated ledgers AND
+ * activate all genesis amendments.
+ *
+ * Amendments listed in [amendments] are included at genesis but may not
+ * become active until a few ledger closes later. Waiting only for seq > 0
+ * can cause temDISABLED failures on fast runtimes (e.g., Node 24) where
+ * tests start before amendments activate.
+ *
+ * We check both validated_ledger.seq >= MIN_LEDGER and that the node has
+ * reached "proposing" state (fully synced and participating in consensus).
+ */
+const MIN_CONSENSUS_LEDGER = 4; // enough closes for amendment activation
+
 async function waitForConsensus(timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   const { Client } = await import('xrpl');
@@ -625,16 +639,20 @@ async function waitForConsensus(timeoutMs: number): Promise<void> {
       const client = new Client(LOCAL_WS_URL, { timeout: 60_000 });
       await client.connect();
       const res = await client.request({ command: 'server_info' } as any);
-      const seq = (res.result as any)?.info?.validated_ledger?.seq ?? 0;
+      const info = (res.result as any)?.info;
+      const seq = info?.validated_ledger?.seq ?? 0;
+      const state = info?.server_state ?? '';
       await client.disconnect();
-      if (seq > 0) return;
+      // Wait for enough ledger closes so amendments are active, and the
+      // node is fully participating in consensus (not just "connected").
+      if (seq >= MIN_CONSENSUS_LEDGER && (state === 'proposing' || state === 'full')) return;
     } catch {
       // not ready yet
     }
     await new Promise(r => setTimeout(r, 2000));
   }
   throw new Error(
-    `Consensus network did not produce a validated ledger within ${timeoutMs / 1000}s.\n` +
+    `Consensus network did not reach ledger ${MIN_CONSENSUS_LEDGER} within ${timeoutMs / 1000}s.\n` +
     `  Check: docker compose -p ${COMPOSE_PROJECT} logs rippled`
   );
 }
