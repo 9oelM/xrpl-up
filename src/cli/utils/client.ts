@@ -30,6 +30,17 @@ const LOCAL_RETRY_SLEEP_MS = 1_000;
 async function withClientOnce<T>(nodeUrl: string, fn: (client: Client) => Promise<T>): Promise<T> {
   const client = new Client(nodeUrl, { timeout: 60_000 });
   await client.connect();
+
+  // Guard against xrpl.js race: connect() can resolve before the
+  // underlying WebSocket is fully open (observed on Node 20 under load).
+  if (!client.isConnected()) {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('WebSocket did not open within 10s after connect()')), 10_000);
+      client.on('connected', () => { clearTimeout(timeout); resolve(); });
+      client.on('disconnected', () => { clearTimeout(timeout); reject(new Error('WebSocket disconnected during connect')); });
+    });
+  }
+
   try {
     return await fn(client);
   } finally {
