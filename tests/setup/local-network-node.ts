@@ -83,7 +83,7 @@ async function startNode(): Promise<void> {
   });
   const result = spawnSync(TSX, [CLI, "start", "--local", "--local-network", "--detach"], {
     encoding: "utf-8",
-    timeout: 180_000,   // consensus bootstrap: ~30s for consensus + faucet
+    timeout: 300_000,   // consensus bootstrap: up to ~240s for amendment activation + faucet
     env: { ...process.env },
   });
 

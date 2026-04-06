@@ -586,7 +586,7 @@ export async function composeUp(image = DEFAULT_IMAGE, noConsensus = false, debu
   // AND for all amendments to activate. First boot: ~30-60s for consensus
   // + amendment activation. Restart with --load: ~10-15s.
   if (!noConsensus) {
-    await waitForConsensus(120_000);
+    await waitForConsensus(240_000);
   }
 
   await waitForPort(FAUCET_PORT, 30_000, 'faucet HTTP');
@@ -644,6 +644,9 @@ async function waitForConsensus(timeoutMs: number): Promise<void> {
     }
   } catch { /* fall back to just checking validated ledger */ }
 
+  let lastLogTime = 0;
+  const LOG_INTERVAL_MS = 15_000; // log progress every 15s
+
   while (Date.now() < deadline) {
     let client: InstanceType<typeof Client> | null = null;
     try {
@@ -668,18 +671,42 @@ async function waitForConsensus(timeoutMs: number): Promise<void> {
         const featureRes = await client.request({ command: 'feature' } as any);
         const features = (featureRes.result as any)?.features ?? {};
 
-        let allConfiguredEnabled = true;
+        let enabledCount = 0;
+        const notEnabled: string[] = [];
         for (const hash of configuredHashes) {
           const entry = features[hash];
-          if (!entry || entry.enabled !== true) {
-            allConfiguredEnabled = false;
-            break;
+          if (entry?.enabled === true) {
+            enabledCount++;
+          } else {
+            notEnabled.push(entry?.name ?? hash.slice(0, 12) + '…');
           }
         }
 
-        if (allConfiguredEnabled) {
+        if (notEnabled.length === 0) {
           await client.disconnect();
           return;
+        }
+
+        // Periodic progress log so CI doesn't look stuck
+        const now = Date.now();
+        if (now - lastLogTime > LOG_INTERVAL_MS) {
+          lastLogTime = now;
+          const elapsed = Math.round((now - (deadline - timeoutMs)) / 1000);
+          console.log(
+            `  [waitForConsensus] ${elapsed}s: seq=${seq} state=${state} ` +
+            `amendments=${enabledCount}/${configuredHashes.size} ` +
+            `(waiting: ${notEnabled.slice(0, 5).join(', ')}${notEnabled.length > 5 ? '…' : ''})`
+          );
+        }
+      } else {
+        // Phase 1 progress log
+        const now = Date.now();
+        if (now - lastLogTime > LOG_INTERVAL_MS) {
+          lastLogTime = now;
+          const elapsed = Math.round((now - (deadline - timeoutMs)) / 1000);
+          console.log(
+            `  [waitForConsensus] ${elapsed}s: seq=${seq} state=${state || '(connecting)'} — waiting for validated ledger…`
+          );
         }
       }
     } catch {
@@ -689,8 +716,27 @@ async function waitForConsensus(timeoutMs: number): Promise<void> {
     }
     await new Promise(r => setTimeout(r, 2000));
   }
+
+  // Final diagnostic before throwing
+  let diagnostic = '';
+  try {
+    const diagClient = new Client(LOCAL_WS_URL, { timeout: 10_000 });
+    await diagClient.connect();
+    const featureRes = await diagClient.request({ command: 'feature' } as any);
+    const features = (featureRes.result as any)?.features ?? {};
+    const notEnabled: string[] = [];
+    for (const hash of configuredHashes) {
+      const entry = features[hash];
+      if (!entry || entry.enabled !== true) {
+        notEnabled.push(entry?.name ?? hash);
+      }
+    }
+    diagnostic = `\n  Not enabled (${notEnabled.length}): ${notEnabled.join(', ')}`;
+    await diagClient.disconnect();
+  } catch { /* ignore */ }
+
   throw new Error(
-    `Consensus network amendments did not activate within ${timeoutMs / 1000}s.\n` +
+    `Consensus network amendments did not activate within ${timeoutMs / 1000}s.${diagnostic}\n` +
     `  Check: docker compose -p ${COMPOSE_PROJECT} logs rippled`
   );
 }
