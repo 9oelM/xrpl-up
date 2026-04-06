@@ -124,7 +124,7 @@ async function startNode(): Promise<void> {
   });
   const result = spawnSync(TSX, [CLI, "start", "--local", "--detach"], {
     encoding: "utf-8",
-    timeout: 30_000,    // standalone mode: fast startup, no consensus wait
+    timeout: 120_000,   // standalone is fast but first run pulls Docker image
     env: { ...process.env },
   });
 
