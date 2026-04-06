@@ -570,6 +570,16 @@ export async function composeUp(image = DEFAULT_IMAGE, noConsensus = false, debu
   writeComposeFile(image, noConsensus, debug, ledgerIntervalMs, configPath, noRestart);
   if (noConsensus) composeDown(); // clean slate only in standalone mode
 
+  // Pull the rippled image if not already cached — gives clear feedback on first run
+  // instead of hanging silently inside docker compose up.
+  try {
+    execSync(`docker image inspect ${image}`, { stdio: 'ignore' });
+  } catch {
+    // Image not found locally — pull with visible output
+    console.log(`  Pulling ${image} (first time only)…`);
+    execSync(`docker pull ${image}`, { stdio: 'inherit' });
+  }
+
   execSync(
     `docker compose -p ${COMPOSE_PROJECT} -f "${COMPOSE_FILE}" up --build -d`,
     { stdio: 'ignore' }
