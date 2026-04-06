@@ -621,38 +621,50 @@ export function isConsensusMode(): boolean {
  * activate all genesis amendments.
  *
  * Amendments listed in [amendments] are included at genesis but may not
- * become active until a few ledger closes later. Waiting only for seq > 0
- * can cause temDISABLED failures on fast runtimes (e.g., Node 24) where
- * tests start before amendments activate.
- *
- * We check both validated_ledger.seq >= MIN_LEDGER and that the node has
- * reached "proposing" state (fully synced and participating in consensus).
+ * become active until several ledger closes later. We query the `feature`
+ * admin command and wait until every amendment reports `enabled: true`.
+ * This prevents temDISABLED errors on fast runtimes (e.g., Node 24) where
+ * tests would otherwise start before amendments activate.
  */
-const MIN_CONSENSUS_LEDGER = 4; // enough closes for amendment activation
-
 async function waitForConsensus(timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   const { Client } = await import('xrpl');
 
   while (Date.now() < deadline) {
+    let client: InstanceType<typeof Client> | null = null;
     try {
-      const client = new Client(LOCAL_WS_URL, { timeout: 60_000 });
+      client = new Client(LOCAL_WS_URL, { timeout: 60_000 });
       await client.connect();
+
+      // Phase 1: validated ledger exists and node is proposing
       const res = await client.request({ command: 'server_info' } as any);
       const info = (res.result as any)?.info;
       const seq = info?.validated_ledger?.seq ?? 0;
       const state = info?.server_state ?? '';
-      await client.disconnect();
-      // Wait for enough ledger closes so amendments are active, and the
-      // node is fully participating in consensus (not just "connected").
-      if (seq >= MIN_CONSENSUS_LEDGER && (state === 'proposing' || state === 'full')) return;
+
+      if (seq > 0 && (state === 'proposing' || state === 'full')) {
+        // Phase 2: all amendments enabled
+        const featureRes = await client.request({ command: 'feature' } as any);
+        const features = (featureRes.result as any) ?? {};
+        // Each key is an amendment hash, value has { name, enabled, supported }
+        const allEnabled = Object.values(features).every(
+          (f: any) => f.enabled === true
+        );
+
+        if (allEnabled) {
+          await client.disconnect();
+          return;
+        }
+      }
     } catch {
       // not ready yet
+    } finally {
+      try { await client?.disconnect(); } catch { /* ignore */ }
     }
     await new Promise(r => setTimeout(r, 2000));
   }
   throw new Error(
-    `Consensus network did not reach ledger ${MIN_CONSENSUS_LEDGER} within ${timeoutMs / 1000}s.\n` +
+    `Consensus network amendments did not activate within ${timeoutMs / 1000}s.\n` +
     `  Check: docker compose -p ${COMPOSE_PROJECT} logs rippled`
   );
 }
