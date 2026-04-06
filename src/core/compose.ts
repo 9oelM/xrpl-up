@@ -588,10 +588,11 @@ export async function composeUp(image = DEFAULT_IMAGE, noConsensus = false, debu
   // Wait for rippled WebSocket port
   await waitForPort(LOCAL_WS_PORT, 30_000, 'rippled WebSocket');
 
-  // In consensus mode, wait for the network to reach validated state.
-  // This takes ~20-30s on first boot, ~10-15s on restart with --load.
+  // In consensus mode, wait for the network to reach validated state
+  // AND for all amendments to activate. First boot: ~30-60s for consensus
+  // + amendment activation. Restart with --load: ~10-15s.
   if (!noConsensus) {
-    await waitForConsensus(60_000);
+    await waitForConsensus(120_000);
   }
 
   await waitForPort(FAUCET_PORT, 30_000, 'faucet HTTP');
@@ -644,14 +645,15 @@ async function waitForConsensus(timeoutMs: number): Promise<void> {
 
       if (seq > 0 && (state === 'proposing' || state === 'full')) {
         // Phase 2: all amendments enabled
+        // The `feature` response has { result: { <hash>: { name, enabled, supported }, status: "success" } }
+        // Filter to only amendment entries (objects with an `enabled` property).
         const featureRes = await client.request({ command: 'feature' } as any);
-        const features = (featureRes.result as any) ?? {};
-        // Each key is an amendment hash, value has { name, enabled, supported }
-        const allEnabled = Object.values(features).every(
-          (f: any) => f.enabled === true
+        const result = (featureRes.result as any) ?? {};
+        const amendments = Object.values(result).filter(
+          (f: any) => typeof f === 'object' && f !== null && 'enabled' in f
         );
 
-        if (allEnabled) {
+        if (amendments.length > 0 && amendments.every((f: any) => f.enabled === true)) {
           await client.disconnect();
           return;
         }
