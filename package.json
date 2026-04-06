@@ -25,7 +25,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "postbuild": "cp src/faucet-server/package.json dist/faucet-server/package.json && cp src/faucet-server/Dockerfile dist/faucet-server/Dockerfile && chmod +x dist/cli.js",
+    "postbuild": "cp src/faucet-server/package.json dist/faucet-server/package.json && cp src/faucet-server/Dockerfile dist/faucet-server/Dockerfile && chmod +x dist/cli.js && mkdir -p dist/core/genesis && cp src/core/genesis/*.tar.gz dist/core/genesis/",
     "dev": "tsx src/cli.ts",
     "clean": "rm -rf dist",
     "prepare": "npm run build",

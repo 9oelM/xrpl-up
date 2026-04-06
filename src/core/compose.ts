@@ -58,6 +58,16 @@ function getFaucetBuildContext(): string {
   return fromDist;
 }
 
+/**
+ * Returns the absolute path to the pre-built genesis DB tarball directory.
+ *
+ * At runtime (compiled):  __dirname = dist/core/  → genesis/ is dist/core/genesis/
+ * In dev mode (tsx):      __dirname = src/core/   → genesis/ is src/core/genesis/
+ */
+function getGenesisDbDir(): string {
+  return path.resolve(__dirname, 'genesis');
+}
+
 const RIPPLED_CFG_FILE       = path.join(XRPL_UP_DIR, 'rippled.cfg');
 const RIPPLED_CFG_FILE_NODE1 = path.join(XRPL_UP_DIR, 'rippled-node1.cfg');
 const RIPPLED_CFG_FILE_NODE2 = path.join(XRPL_UP_DIR, 'rippled-node2.cfg');
@@ -123,6 +133,9 @@ validators.txt
 
 [ssl_verify]
 0
+
+[amendment_majority_time]
+15 minutes
 
 # Force-enable amendments at genesis ledger creation.
 # The [amendments] stanza only takes effect on the very first start
@@ -542,6 +555,66 @@ export function composeDown(): void {
 }
 
 /**
+ * Returns true if a Docker volume exists AND contains a ledger.db file.
+ * This is the same sentinel the entrypoint checks to decide --load vs --start.
+ */
+function volumeHasData(volumeName: string): boolean {
+  try {
+    execSync(
+      `docker run --rm -v ${volumeName}:/data alpine test -f /data/ledger.db`,
+      { stdio: 'ignore' },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Seed consensus volumes with pre-built genesis DB if they are empty.
+ *
+ * Uses pre-built tarballs containing a ledger at ~seq 782 with all mainnet
+ * amendments already activated through voting. This avoids the ~38-minute
+ * amendment voting delay on first boot.
+ *
+ * The entrypoint checks for /var/lib/rippled/db/ledger.db and uses
+ * --load (instead of --start) when it exists, so pre-seeded volumes
+ * boot immediately into a functioning consensus network.
+ */
+function seedConsensusVolumes(): void {
+  const genesisDir = getGenesisDbDir();
+  const node1Tar = path.join(genesisDir, 'node1-db.tar.gz');
+  const node2Tar = path.join(genesisDir, 'node2-db.tar.gz');
+
+  // If tarballs are missing (e.g. dev build without them), skip silently
+  if (!fs.existsSync(node1Tar) || !fs.existsSync(node2Tar)) return;
+
+  const node1Has = volumeHasData(VOLUME_NAME);
+  const node2Has = volumeHasData(PEER_VOLUME_NAME);
+
+  // Both volumes have data — nothing to do
+  if (node1Has && node2Has) return;
+
+  // Seed both volumes (even if one already has data, reseed to keep them in sync)
+  const pairs: [string, string][] = [
+    [VOLUME_NAME, node1Tar],
+    [PEER_VOLUME_NAME, node2Tar],
+  ];
+
+  for (const [vol, tar] of pairs) {
+    try { execSync(`docker volume rm -f ${vol}`, { stdio: 'ignore' }); } catch { /* ok */ }
+    execSync(`docker volume create ${vol}`, { stdio: 'ignore' });
+    execSync(
+      `docker run --rm ` +
+      `-v ${vol}:/data ` +
+      `-v "${path.dirname(tar)}":/genesis:ro ` +
+      `alpine tar xzf /genesis/${path.basename(tar)} -C /data`,
+      { stdio: 'ignore' },
+    );
+  }
+}
+
+/**
  * Start the compose stack (`docker compose up --build -d`),
  * wait for ports and (in consensus mode) for the first validated ledger.
  *
@@ -551,6 +624,9 @@ export function composeDown(): void {
 export async function composeUp(image = DEFAULT_IMAGE, noConsensus = false, debug = false, ledgerIntervalMs = 0, configPath?: string, noRestart = false): Promise<string> {
   writeComposeFile(image, noConsensus, debug, ledgerIntervalMs, configPath, noRestart);
   if (noConsensus) composeDown(); // clean slate only in standalone mode
+
+  // Pre-seed consensus volumes with genesis DB on first run
+  if (!noConsensus) seedConsensusVolumes();
 
   // Pull the rippled image if not already cached — gives clear feedback on first run
   // instead of hanging silently inside docker compose up.
@@ -612,6 +688,7 @@ async function waitForConsensus(timeoutMs: number): Promise<void> {
 
   let lastLogTime = 0;
   const LOG_INTERVAL_MS = 15_000;
+  let firstSeq = 0; // track initial seq to detect advancement
 
   while (Date.now() < deadline) {
     let client: InstanceType<typeof Client> | null = null;
@@ -624,7 +701,12 @@ async function waitForConsensus(timeoutMs: number): Promise<void> {
       const seq = info?.validated_ledger?.seq ?? 0;
       const state = info?.server_state ?? '';
 
-      if (seq > 0 && (state === 'proposing' || state === 'full')) {
+      // Record the first seq we see — on a pre-seeded DB this will be
+      // the loaded value (e.g. 911). We need to see seq advance beyond
+      // this to confirm the network is actually producing new ledgers.
+      if (seq > 0 && firstSeq === 0) firstSeq = seq;
+
+      if (seq > firstSeq && (state === 'proposing' || state === 'full')) {
         await client.disconnect();
         return;
       }
