@@ -47,6 +47,8 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run build
+      - name: Pull rippled Docker image
+        run: docker pull xrpllabsofficial/xrpld:latest
       - name: Run e2e tests (${{ matrix.mode }})
         env:
           XRPL_LOCAL_TEARDOWN: '1'
