@@ -1033,7 +1033,7 @@ xrpl-up vault --help
 
 Inspect and manage XRPL amendments in the local sandbox. The local sandbox starts with a set of amendments baked into its genesis config; use `enable` to queue additional amendments (takes effect after `xrpl-up reset && xrpl-up start`).
 
-> **Local only for mutations:** `enable` and `disable` write to the genesis config and only apply to the local sandbox. `list` and `info` work on any network.
+> **Local only for mutations:** `enable` writes to the genesis config and only applies to the local sandbox. `list` and `info` work on any network.
 
 #### `xrpl-up amendment list`
 
@@ -1157,12 +1157,9 @@ xrpl-up snapshot restore after-setup             # restore saved state
 xrpl-up accounts --local                         # snapshot accounts restored
 ```
 
-Snapshots are stored at `~/.xrpl-up/snapshots/`. Each snapshot is a pair of files:
+Snapshots are stored at `~/.xrpl-up/snapshots/` and are portable — copy them to any machine and restore. Each snapshot is a pair of files:
 - `<name>.tar.gz` — compressed NuDB ledger volume (typically 5–100 MB)
 - `<name>-accounts.json` — account store at snapshot time
-
-Snapshots are stored at `~/.xrpl-up/snapshots/` and are portable — copy them to any machine and restore.
-```
 
 ---
 
