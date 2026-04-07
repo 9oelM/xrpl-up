@@ -3,6 +3,23 @@ name: xrpl-up
 description: Command-line interface for the XRP Ledger — send transactions, manage wallets, query accounts, and interact with AMM/NFT/DeFi features without writing scripts
 ---
 
+## How to use this skill
+
+The user has made a natural language request: **$ARGUMENTS**
+
+Your job is to translate it into one or more `xrpl-up` CLI commands using the reference below, then execute them.
+
+Steps:
+1. Identify the intent (e.g. send payment, check balance, create offer, mint NFT).
+2. Select the matching command and flags from this reference.
+3. If required information is missing (e.g. destination address, amount, seed), ask the user before proceeding.
+4. Construct the full CLI invocation and run it via Bash.
+5. Explain the result to the user in plain language.
+
+If `$ARGUMENTS` is empty, ask the user what they'd like to do on the XRP Ledger.
+
+---
+
 ## Installation
 
 **Requirements:** Node.js 22 or higher.
@@ -327,6 +344,40 @@ Remove a wallet from the keystore.
 xrpl-up wallet remove rXXX...
 ```
 
+### Example flow: Alice creates a wallet, saves it to the keystore, funds it, and signs a message
+
+```bash
+# 1. Generate a new ed25519 wallet for Alice and save it to the keystore
+xrpl-up wallet new --key-type ed25519 --save --alias alice
+# → Address: rAliceXXXX...  (note this address)
+
+# 2. Fund Alice's account from the testnet faucet
+xrpl-up --node testnet wallet fund rAliceXXXX...
+
+# 3. Import Bob's existing seed into the keystore under an alias
+xrpl-up wallet import sEdBobSeedXXXXXXXXXXXXXXXXXXXX --alias bob
+
+# 4. List all keystore entries to confirm both wallets are saved
+xrpl-up wallet list
+
+# 5. Sign a message as Alice — plain output is the raw hex signature
+SIG=$(xrpl-up wallet sign --message "I am Alice" --seed sEdAliceXXXX...)
+# → 8BD9A15AFC7F22BC2...
+
+# 6. Get Alice's public key (use --json for clean single-value extraction)
+PUBKEY=$(xrpl-up wallet public-key --seed sEdAliceXXXX... --json | python3 -c "import sys,json; print(json.load(sys.stdin)['publicKey'])")
+
+# 7. Verify the signature (anyone can do this without secrets)
+xrpl-up wallet verify \
+  --message "I am Alice" \
+  --signature "$SIG" \
+  --public-key "$PUBKEY"
+# → ✓ Valid signature
+
+# 8. Derive Alice's address from her seed alone
+xrpl-up wallet address --seed sEdAliceXXXX...
+```
+
 ## account
 
 Query and configure XRPL accounts: balances, settings, trust lines, offers, channels, transactions, NFTs, and MPTs.
@@ -492,6 +543,33 @@ List Multi-Purpose Tokens (MPT) held by an account.
 xrpl-up account mptokens rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
 ```
 
+### Example flow: Query Alice's account, set flags, assign a regular key, inspect holdings
+
+```bash
+# 1. Check Alice's full account info and XRP balance
+xrpl-up --node testnet account info rAliceXXXX...
+xrpl-up --node testnet account balance rAliceXXXX...
+
+# 2. Set Alice's domain (auto hex-encoded) and enable RequireDestTag
+xrpl-up --node testnet account set \
+  --domain "alice.example.com" \
+  --set-flag requireDestTag \
+  --seed sEdAliceXXXX...
+
+# 3. Assign a separate regular key so the master key can stay cold
+xrpl-up --node testnet account set-regular-key \
+  --key rRegularKeyXXXX... --seed sEdAliceXXXX...
+
+# 4. Inspect Alice's trust lines, open DEX offers, and recent transactions
+xrpl-up --node testnet account trust-lines rAliceXXXX...
+xrpl-up --node testnet account offers rAliceXXXX...
+xrpl-up --node testnet account transactions rAliceXXXX... --limit 5
+
+# 5. List NFTs and MPT balances on Alice's account
+xrpl-up --node testnet account nfts rAliceXXXX...
+xrpl-up --node testnet account mptokens rAliceXXXX...
+```
+
 ## payment
 
 Alias: `send`. Send a Payment transaction on the XRP Ledger.
@@ -516,6 +594,38 @@ Alias: `send`. Send a Payment transaction on the XRP Ledger.
 
 ```bash
 xrpl-up payment --to rDestination... --amount 1.5 --seed sEd...
+```
+
+### Example flow: Alice sends XRP to Bob, then Bob receives USD IOU, then Alice sends MPT to Bob
+
+```bash
+# 1. Alice sends 10 XRP to Bob
+xrpl-up --node testnet payment \
+  --to rBobXXXX... --amount 10 \
+  --seed sEdAliceXXXX...
+
+# 2. Bob sets up a USD trust line, then Alice (as issuer) sends 100 USD to Bob
+xrpl-up --node testnet trust set \
+  --currency USD --issuer rAliceXXXX... --limit 1000 \
+  --seed sEdBobXXXX...
+xrpl-up --node testnet payment \
+  --to rBobXXXX... --amount 100/USD/rAliceXXXX... \
+  --seed sEdAliceXXXX...
+
+# 3. Alice creates an MPToken issuance with can-transfer flag
+xrpl-up --node testnet mptoken issuance create \
+  --flags can-transfer --max-amount 1000000 \
+  --seed sEdAliceXXXX... --json
+# → {"issuanceId":"0000001AABBCC..."}
+
+# 4. Bob opts into the MPT issuance
+xrpl-up --node testnet mptoken authorize 0000001AABBCC... \
+  --seed sEdBobXXXX...
+
+# 5. Alice sends 500 MPT units to Bob
+xrpl-up --node testnet payment \
+  --to rBobXXXX... --amount 500/0000001AABBCC... \
+  --seed sEdAliceXXXX...
 ```
 
 ## trust
@@ -553,6 +663,32 @@ Remove a trust line by setting its limit to zero.
 
 ```bash
 xrpl-up trust set --currency USD --issuer rIssuer... --limit 0 --seed sEd...
+```
+
+### Example flow: Alice enables DefaultRipple, Bob creates a trust line, Alice issues USD to Bob
+
+```bash
+# 1. Alice (the IOU issuer) enables DefaultRipple so her tokens can ripple between holders
+xrpl-up --node testnet account set \
+  --set-flag defaultRipple --seed sEdAliceXXXX...
+
+# 2. Bob creates a USD trust line to Alice with a limit of 10,000
+xrpl-up --node testnet trust set \
+  --currency USD --issuer rAliceXXXX... --limit 10000 \
+  --seed sEdBobXXXX...
+
+# 3. Alice sends 500 USD to Bob (direct issuance — no SendMax needed)
+xrpl-up --node testnet payment \
+  --to rBobXXXX... --amount 500/USD/rAliceXXXX... \
+  --seed sEdAliceXXXX...
+
+# 4. Verify Bob's trust lines
+xrpl-up --node testnet account trust-lines rBobXXXX...
+
+# 5. Bob removes the trust line after the balance reaches zero
+xrpl-up --node testnet trust set \
+  --currency USD --issuer rAliceXXXX... --limit 0 \
+  --seed sEdBobXXXX...
 ```
 
 ## offer
@@ -597,6 +733,34 @@ Cancel an existing DEX offer (OfferCancel transaction).
 xrpl-up offer cancel --sequence 12 --seed sEd...
 ```
 
+### Example flow: Alice places a USD sell offer, Bob's matching offer fills it; Alice cancels a leftover offer
+
+```bash
+# Prerequisite: Alice holds USD from rIssuerXXX... and Bob has a USD trust line
+
+# 1. Alice creates a sell offer: she pays 10 USD to get 5 XRP
+#    --json output has "offerSequence" — the value needed for offer cancel
+xrpl-up --node testnet offer create \
+  --taker-pays 5 \
+  --taker-gets 10/USD/rIssuerXXX... \
+  --sell \
+  --seed sEdAliceXXXX... --json
+# → {"hash":"...","result":"tesSUCCESS","offerSequence":16331330}
+
+# 2. Bob creates a matching buy offer: he pays 10 USD to get 5 XRP (crosses Alice's offer)
+xrpl-up --node testnet offer create \
+  --taker-pays 10/USD/rIssuerXXX... \
+  --taker-gets 5 \
+  --seed sEdBobXXXX...
+
+# 3. Verify Alice's remaining open offers (should be empty if fully filled)
+xrpl-up --node testnet account offers rAliceXXXX...
+
+# 4. If Alice's offer was only partially filled, cancel using "offerSequence" from step 1
+xrpl-up --node testnet offer cancel \
+  --sequence 16331330 --seed sEdAliceXXXX...
+```
+
 ## clawback
 
 Claw back issued tokens (IOU or MPT) from a holder account.
@@ -616,6 +780,46 @@ xrpl-up clawback --amount 50/USD/rHolder... --seed sEd...
 
 # MPT clawback
 xrpl-up clawback --amount 100/0000000000000000000000000000000000000001 --holder rHolder... --seed sEd...
+```
+
+### Example flow: Alice enables clawback, issues USD to Bob, then claws back 50 USD
+
+```bash
+# 1. Alice enables AllowTrustLineClawback on her account (irreversible)
+xrpl-up --node testnet account set \
+  --allow-clawback --confirm --seed sEdAliceXXXX...
+
+# 2. Bob creates a USD trust line to Alice
+xrpl-up --node testnet trust set \
+  --currency USD --issuer rAliceXXXX... --limit 1000 \
+  --seed sEdBobXXXX...
+
+# 3. Alice issues 100 USD to Bob
+xrpl-up --node testnet payment \
+  --to rBobXXXX... --amount 100/USD/rAliceXXXX... \
+  --seed sEdAliceXXXX...
+
+# 4. Alice claws back 50 USD from Bob (IOU clawback)
+xrpl-up --node testnet clawback \
+  --amount 50/USD/rBobXXXX... \
+  --seed sEdAliceXXXX...
+
+# --- MPT clawback variant ---
+# 5. Alice creates an MPT issuance with can-clawback flag
+xrpl-up --node testnet mptoken issuance create \
+  --flags can-transfer,can-clawback \
+  --seed sEdAliceXXXX... --json
+# → {"issuanceId":"0000002CCDDEE..."}
+
+# 6. Bob opts in and Alice sends 500 MPT units
+xrpl-up --node testnet mptoken authorize 0000002CCDDEE... --seed sEdBobXXXX...
+xrpl-up --node testnet payment \
+  --to rBobXXXX... --amount 500/0000002CCDDEE... --seed sEdAliceXXXX...
+
+# 7. Alice claws back 200 MPT units from Bob
+xrpl-up --node testnet clawback \
+  --amount 200/0000002CCDDEE... --holder rBobXXXX... \
+  --seed sEdAliceXXXX...
 ```
 
 ## channel
@@ -723,6 +927,52 @@ List open payment channels for an account (read-only, no key material needed).
 xrpl-up channel list rSource...
 ```
 
+### Example flow: Alice opens a payment channel to Bob, signs off-chain claims, Bob redeems the final claim
+
+```bash
+# 1. Alice opens a payment channel locking 10 XRP, with a 24 h settle delay
+xrpl-up --node testnet channel create \
+  --to rBobXXXX... --amount 10 --settle-delay 86400 \
+  --seed sEdAliceXXXX... --json
+# → {"channelId":"AABBCC...64chars","result":"tesSUCCESS"}
+
+# 2. Get Alice's public key (needed for verify and claim steps)
+ALICE_PUBKEY=$(xrpl-up wallet public-key --seed sEdAliceXXXX... --json | python3 -c "import sys,json; print(json.load(sys.stdin)['publicKey'])")
+
+# 3. Alice signs an off-chain claim for 3 XRP (no network call — instant)
+#    plain output is the raw hex signature
+SIG=$(xrpl-up channel sign --channel AABBCC...64chars --amount 3 --seed sEdAliceXXXX...)
+
+# 4. Bob verifies the claim signature before accepting payment
+xrpl-up channel verify \
+  --channel AABBCC...64chars --amount 3 \
+  --signature "$SIG" --public-key "$ALICE_PUBKEY"
+# → valid
+
+# 5. Alice signs a larger claim for 7 XRP later (accumulated total)
+SIG2=$(xrpl-up channel sign --channel AABBCC...64chars --amount 7 --seed sEdAliceXXXX...)
+
+# 6. Bob redeems the final 7 XRP claim on-chain (submits once, not once per payment)
+xrpl-up --node testnet channel claim \
+  --channel AABBCC...64chars \
+  --amount 7 --balance 7 \
+  --signature "$SIG2" --public-key "$ALICE_PUBKEY" \
+  --seed sEdBobXXXX...
+
+# 6. Alice tops up the channel with 5 more XRP
+xrpl-up --node testnet channel fund \
+  --channel AABBCC...64chars --amount 5 \
+  --seed sEdAliceXXXX...
+
+# 7. Alice requests channel closure (funds return after settle delay)
+xrpl-up --node testnet channel claim \
+  --channel AABBCC...64chars --close \
+  --seed sEdAliceXXXX...
+
+# 8. List all open channels for Alice
+xrpl-up --node testnet channel list rAliceXXXX...
+```
+
 ## escrow
 
 Manage XRPL escrows: create time-locked or crypto-condition escrows, release funds, cancel expired escrows, and list pending escrows.
@@ -795,6 +1045,46 @@ List pending escrows for an account (read-only, no key material needed).
 xrpl-up escrow list rAccount...
 ```
 
+### Example flow: Alice creates a time-based escrow for Bob, Bob releases it; crypto-condition variant included
+
+```bash
+# 1. Alice locks 5 XRP in an escrow for Bob, releasable after 5 minutes, expires in 1 hour
+xrpl-up --node testnet escrow create \
+  --to rBobXXXX... --amount 5 \
+  --finish-after 2030-06-01T00:05:00Z \
+  --cancel-after 2030-06-01T01:00:00Z \
+  --seed sEdAliceXXXX... --json
+# → {"sequence":17,"result":"tesSUCCESS"}
+
+# 2. List Alice's pending escrows to confirm
+xrpl-up --node testnet escrow list rAliceXXXX...
+
+# 3. After the finish-after time passes, Bob (or anyone) finishes the escrow
+xrpl-up --node testnet escrow finish \
+  --owner rAliceXXXX... --sequence 17 \
+  --seed sEdBobXXXX...
+
+# 4. If the escrow expires (after cancel-after), Alice cancels it to reclaim the XRP
+xrpl-up --node testnet escrow cancel \
+  --owner rAliceXXXX... --sequence 17 \
+  --seed sEdAliceXXXX...
+
+# --- Crypto-condition variant ---
+# 5. Alice creates a condition-locked escrow (preimage required to release)
+xrpl-up --node testnet escrow create \
+  --to rBobXXXX... --amount 10 \
+  --condition A025802066687AADF862BD776C8FC18B8E9F8E20089714856EE233B3902A591D0D5F2925810120 \
+  --cancel-after 2030-12-31T00:00:00Z \
+  --seed sEdAliceXXXX...
+
+# 6. Bob (who knows the preimage) finishes the condition escrow
+xrpl-up --node testnet escrow finish \
+  --owner rAliceXXXX... --sequence 18 \
+  --condition A025802066687AADF862BD776C8FC18B8E9F8E20089714856EE233B3902A591D0D5F2925810120 \
+  --fulfillment A0228020000000000000000000000000000000000000000000000000000000000000000081010 \
+  --seed sEdBobXXXX...
+```
+
 ## check
 
 Manage XRPL Checks: create deferred payment authorizations, cash them, cancel them, and list pending checks.
@@ -860,6 +1150,28 @@ List pending checks for an account (read-only, no key material needed).
 
 ```bash
 xrpl-up check list rAccount...
+```
+
+### Example flow: Alice writes a Check for Bob, Bob cashes it; Alice cancels an unused check
+
+```bash
+# 1. Alice creates a Check — authorizing Bob to pull up to 20 XRP from her account
+xrpl-up --node testnet check create \
+  --to rBobXXXX... --send-max 20 \
+  --seed sEdAliceXXXX... --json
+# → {"checkId":"CCDDEE...64chars","result":"tesSUCCESS"}
+
+# 2. List Bob's incoming checks
+xrpl-up --node testnet check list rBobXXXX...
+
+# 3. Bob cashes the check for exactly 15 XRP
+xrpl-up --node testnet check cash \
+  --check CCDDEE...64chars --amount 15 \
+  --seed sEdBobXXXX...
+
+# 4. Alternatively, if Bob doesn't cash it, Alice cancels the check to reclaim the reserve
+xrpl-up --node testnet check cancel \
+  --check CCDDEE...64chars --seed sEdAliceXXXX...
 ```
 
 ## amm
@@ -991,6 +1303,43 @@ Query AMM pool state.
 xrpl-up amm info --asset XRP --asset2 USD/rIssuerXXX... --json
 ```
 
+### Example flow: Alice creates an XRP/USD AMM pool, deposits liquidity, votes on fee, withdraws all
+
+```bash
+# Prerequisite: Alice holds USD issued by rIssuerXXX... and has set up a trust line
+
+# 1. Alice creates an XRP/USD AMM pool with 1,000,000 drops (1 XRP) and 100 USD, fee = 0.3%
+xrpl-up --node testnet amm create \
+  --asset XRP \
+  --asset2 USD/rIssuerXXX... \
+  --amount 1000000 \
+  --amount2 100 \
+  --trading-fee 300 \
+  --seed sEdAliceXXXX... --json
+# → {"ammAccount":"rAMMXXXX...","lpTokenCurrency":"03...","result":"tesSUCCESS"}
+
+# 2. Query the pool state (balances, LP token supply, current fee)
+xrpl-up --node testnet amm info --asset XRP --asset2 USD/rIssuerXXX...
+
+# 3. Alice deposits an additional 500,000 drops of XRP (single-asset deposit)
+xrpl-up --node testnet amm deposit \
+  --asset XRP --asset2 USD/rIssuerXXX... \
+  --amount 500000 \
+  --seed sEdAliceXXXX...
+
+# 4. Alice votes to lower the trading fee to 0.1%
+xrpl-up --node testnet amm vote \
+  --asset XRP --asset2 USD/rIssuerXXX... \
+  --trading-fee 100 \
+  --seed sEdAliceXXXX...
+
+# 5. Alice withdraws all liquidity (auto-deletes the pool when she is the sole LP)
+xrpl-up --node testnet amm withdraw \
+  --asset XRP --asset2 USD/rIssuerXXX... \
+  --all \
+  --seed sEdAliceXXXX...
+```
+
 ## nft
 
 Manage NFTs on the XRP Ledger.
@@ -1090,6 +1439,64 @@ List all buy and sell offers for an NFT (read-only, no key material needed).
 xrpl-up nft offer list <64hexNFTokenID> --json
 ```
 
+### Example flow: Alice mints an NFT, creates a sell offer, Bob buys it; brokered sale variant included
+
+```bash
+# 1. Alice mints a transferable NFT with a metadata URI and 1% royalty fee
+xrpl-up --node testnet nft mint \
+  --taxon 42 \
+  --uri https://example.com/nft-metadata.json \
+  --transferable \
+  --transfer-fee 1000 \
+  --seed sEdAliceXXXX... --json
+# → {"nftokenId":"AABBCC...64chars","result":"tesSUCCESS"}
+
+# 2. Alice creates a sell offer for 10 XRP
+xrpl-up --node testnet nft offer create \
+  --nft AABBCC...64chars --amount 10 --sell \
+  --seed sEdAliceXXXX... --json
+# → {"offerId":"DDEE...64chars","result":"tesSUCCESS"}
+
+# 3. List all buy/sell offers for the NFT
+xrpl-up --node testnet nft offer list AABBCC...64chars
+
+# 4. Bob accepts Alice's sell offer (direct sale — Bob pays 10 XRP, receives NFT)
+xrpl-up --node testnet nft offer accept \
+  --sell-offer DDEE...64chars --seed sEdBobXXXX...
+
+# 5. Verify Bob now holds the NFT
+xrpl-up --node testnet account nfts rBobXXXX...
+
+# --- Brokered sale variant ---
+# Alice creates a sell offer, Carol creates a buy offer, broker executes both
+
+# 6. Bob (now owner) creates a sell offer
+xrpl-up --node testnet nft offer create \
+  --nft AABBCC...64chars --amount 15 --sell \
+  --seed sEdBobXXXX... --json
+# → {"offerId":"SELL...64chars"}
+
+# 7. Carol creates a buy offer for 16 XRP
+xrpl-up --node testnet nft offer create \
+  --nft AABBCC...64chars --amount 16 --owner rBobXXXX... \
+  --seed sEdCarolXXXX... --json
+# → {"offerId":"BUY...64chars"}
+
+# 8. Broker matches both offers (keeping 0.5 XRP as fee)
+xrpl-up --node testnet nft offer accept \
+  --sell-offer SELL...64chars \
+  --buy-offer BUY...64chars \
+  --broker-fee 0.5 \
+  --seed sEdBrokerXXXX...
+
+# 9. Cancel an unused offer
+xrpl-up --node testnet nft offer cancel \
+  --offer DDEE...64chars --seed sEdAliceXXXX...
+
+# 10. Burn the NFT to remove it from the ledger
+xrpl-up --node testnet nft burn --nft AABBCC...64chars --seed sEdAliceXXXX...
+```
+
 ## multisig
 
 Manage XRPL multi-signature signer lists.
@@ -1108,20 +1515,26 @@ Configure a multi-signature signer list on an account.
 xrpl-up multisig set --quorum 2 --signers '[{"account":"rSigner1...","weight":1},{"account":"rSigner2...","weight":1}]' --seed sEd...
 ```
 
-### multisig sign
-
-Produce a partial multisig signature for a transaction.
+### Example flow: Alice sets up 2-of-3 multisig; two signers authorize a payment
 
 ```bash
-xrpl-up multisig sign --tx tx.json --seed sSignerEd...
-```
+# 1. Alice configures a 2-of-3 signer list (signer1, signer2, signer3 are separate accounts)
+xrpl-up --node testnet multisig set \
+  --quorum 2 \
+  --signer rSigner1XXXX...:1 \
+  --signer rSigner2XXXX...:1 \
+  --signer rSigner3XXXX...:1 \
+  --seed sEdAliceXXXX...
 
-### multisig submit
+# 2. Verify the signer list
+xrpl-up --node testnet multisig list rAliceXXXX...
+# → Quorum: 2
+#   rSigner1XXXX... (weight: 1)
+#   rSigner2XXXX... (weight: 1)
+#   rSigner3XXXX... (weight: 1)
 
-Combine partial signatures and submit a multisig transaction.
-
-```bash
-xrpl-up multisig submit --tx tx.json --signatures '[...]'
+# 3. Remove the signer list (replace with an updated one or delete entirely)
+xrpl-up --node testnet multisig delete --seed sEdAliceXXXX...
 ```
 
 ## oracle
@@ -1159,6 +1572,38 @@ Delete an on-chain price oracle (OracleDelete).
 xrpl-up oracle delete --document-id 1 --seed sEd...
 ```
 
+### Example flow: An oracle provider publishes a BTC/USD price feed and keeps it updated
+
+```bash
+# 1. Publish a BTC/USD price feed (oracle document ID = 1)
+xrpl-up --node testnet oracle set \
+  --document-id 1 \
+  --price BTC/USD:155000:6 \
+  --provider pyth \
+  --asset-class currency \
+  --seed sEdOracleXXXX...
+
+# 2. Update the price — same document-id overwrites the previous entry
+xrpl-up --node testnet oracle set \
+  --document-id 1 \
+  --price BTC/USD:160000:6 \
+  --provider pyth \
+  --asset-class currency \
+  --seed sEdOracleXXXX...
+
+# 3. Publish multiple pairs in one transaction using --price-data
+xrpl-up --node testnet oracle set \
+  --document-id 2 \
+  --price-data '[{"BaseAsset":"ETH","QuoteAsset":"USD","AssetPrice":3000000,"Scale":6},{"BaseAsset":"XRP","QuoteAsset":"USD","AssetPrice":5000,"Scale":6}]' \
+  --provider chainlink \
+  --asset-class currency \
+  --seed sEdOracleXXXX...
+
+# 4. Delete the oracle when the feed is discontinued
+xrpl-up --node testnet oracle delete \
+  --document-id 1 --seed sEdOracleXXXX...
+```
+
 ## ticket
 
 Manage XRPL Tickets for sequence-independent transaction ordering.
@@ -1174,6 +1619,24 @@ Reserve ticket sequence numbers on an XRPL account.
 
 ```bash
 xrpl-up ticket create --count 5 --seed sEd...
+```
+
+### Example flow: Alice reserves ticket sequences for parallel transaction submission
+
+```bash
+# 1. Alice creates 5 tickets (sequence numbers she can use independently of her main sequence)
+xrpl-up --node testnet ticket create \
+  --count 5 --seed sEdAliceXXXX... --json
+# → {"hash":"...","result":"tesSUCCESS","sequences":[16331356,16331357,16331358,16331359,16331360]}
+
+# 2. List available ticket sequences on Alice's account
+xrpl-up --node testnet ticket list rAliceXXXX...
+# → Ticket sequence: 12
+#   Ticket sequence: 13
+#   ...
+
+# 3. Tickets let Alice submit transactions out of order or in parallel;
+#    the CLI will automatically use an available ticket when --ticket <seq> is specified.
 ```
 
 ## credential
@@ -1226,6 +1689,31 @@ Delete an on-chain credential (revoke or clean up).
 
 ```bash
 xrpl-up credential delete --subject rSubjectXXX... --credential-type KYCVerified --seed sIssuerEd...
+```
+
+### Example flow: A KYC issuer creates a credential for Alice, Alice accepts it, issuer revokes it
+
+```bash
+# 1. Issuer (KYC provider) creates a credential for Alice
+xrpl-up --node testnet credential create \
+  --subject rAliceXXXX... \
+  --credential-type KYCVerified \
+  --uri https://kyc.example.com/credentials/alice \
+  --expiration 2027-01-01T00:00:00Z \
+  --seed sEdIssuerXXXX... --json
+# → {"credentialId":"AABB...","result":"tesSUCCESS"}
+
+# 2. Alice accepts the credential issued to her
+xrpl-up --node testnet credential accept \
+  --issuer rIssuerXXXX... \
+  --credential-type KYCVerified \
+  --seed sEdAliceXXXX...
+
+# 3. Issuer revokes the credential (e.g. Alice failed re-verification)
+xrpl-up --node testnet credential delete \
+  --subject rAliceXXXX... \
+  --credential-type KYCVerified \
+  --seed sEdIssuerXXXX...
 ```
 
 ## mptoken
@@ -1289,6 +1777,44 @@ Opt a holder out of an MPT issuance (burn their balance).
 xrpl-up mptoken burn --issuance-id <hex> --seed sHolderEd...
 ```
 
+### Example flow: Alice issues an MPToken, Bob opts in and receives tokens, Alice locks Bob's balance
+
+```bash
+# 1. Alice creates an MPToken issuance with can-transfer and can-lock flags
+#    Note: --metadata must be a valid JSON string; plain strings produce a warning on stdout.
+#    Use --json and tail -1 to parse the output if warnings are present.
+xrpl-up --node testnet mptoken issuance create \
+  --flags can-transfer,can-lock \
+  --max-amount 1000000000 \
+  --seed sEdAliceXXXX... --json
+# → {"hash":"...","result":"tesSUCCESS","issuanceId":"00F93262CC0FE0E07B010597BD7364690BE2B042C62003D9"}
+
+# 2. Bob opts into the issuance (MPTokenAuthorize — holds his slot open for this token)
+xrpl-up --node testnet mptoken authorize 0000001AABBCC... \
+  --seed sEdBobXXXX...
+
+# 3. Alice sends 1000 tokens to Bob via payment
+xrpl-up --node testnet payment \
+  --to rBobXXXX... --amount 1000/0000001AABBCC... \
+  --seed sEdAliceXXXX...
+
+# 4. Alice locks Bob's token balance (freezes his specific holding)
+xrpl-up --node testnet mptoken issuance set 0000001AABBCC... \
+  --lock --holder rBobXXXX... --seed sEdAliceXXXX...
+
+# 5. Alice unlocks Bob's balance
+xrpl-up --node testnet mptoken issuance set 0000001AABBCC... \
+  --unlock --holder rBobXXXX... --seed sEdAliceXXXX...
+
+# 6. Bob opts out after his balance reaches zero
+xrpl-up --node testnet mptoken authorize 0000001AABBCC... \
+  --unauthorize --seed sEdBobXXXX...
+
+# 7. Alice destroys the issuance when there is no outstanding supply
+xrpl-up --node testnet mptoken issuance destroy 0000001AABBCC... \
+  --seed sEdAliceXXXX...
+```
+
 ## permissioned-domain
 
 Manage XRPL permissioned domains (XLS-80).
@@ -1334,6 +1860,26 @@ Delete a permissioned domain, reclaiming the reserve.
 xrpl-up permissioned-domain delete --domain-id <64hexID> --seed sEd...
 ```
 
+### Example flow: Alice creates a permissioned domain, updates its credentials, then deletes it
+
+```bash
+# 1. Alice creates a permissioned domain requiring KYC credentials from a trusted issuer
+xrpl-up --node testnet permissioned-domain create \
+  --credential rCredIssuerXXXX...:KYC \
+  --seed sEdAliceXXXX...
+# → Domain ID: AABB...64chars  Tx: CCDD...
+
+# 2. Alice updates the domain to require both KYC and AML credentials
+xrpl-up --node testnet permissioned-domain update \
+  --domain-id AABB...64chars \
+  --credentials-json '[{"issuer":"rCredIssuerXXXX...","credential_type":"4b5943"},{"issuer":"rCredIssuerXXXX...","credential_type":"414d4c"}]' \
+  --seed sEdAliceXXXX...
+
+# 3. Alice deletes the domain when no longer needed
+xrpl-up --node testnet permissioned-domain delete \
+  --domain-id AABB...64chars --seed sEdAliceXXXX...
+```
+
 ## vault
 
 Manage single-asset vaults (XLS-65).
@@ -1344,7 +1890,7 @@ Create a single-asset vault on the XRP Ledger.
 
 | Flag | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `--asset <spec>` | string | **Yes** | — | Asset: `XRP`, `CURRENCY/issuer`, or MPT spec |
+| `--asset <spec>` | string | **Yes** | — | Asset: `0` for XRP, `CURRENCY/issuer` for IOU, or MPT spec |
 | `--assets-maximum <n>` | string | No | — | Maximum total assets (UInt64) |
 | `--data <hex>` | string | No | — | Arbitrary metadata hex (max 256 bytes) |
 | `--domain-id <hash>` | string | No | — | 64-char hex DomainID for private vault |
@@ -1353,7 +1899,7 @@ Create a single-asset vault on the XRP Ledger.
 | `--seed <seed>` | string | No | — | Family seed for signing |
 
 ```bash
-xrpl-up vault create --asset XRP --assets-maximum 1000000 --seed sEd...
+xrpl-up vault create --asset 0 --assets-maximum 1000000 --seed sEd...
 ```
 
 ### vault deposit
@@ -1394,6 +1940,31 @@ Claw back assets from a vault (issuer only).
 xrpl-up vault clawback --vault-id <64hexID> --holder rHolderXXX... --seed sIssuerEd...
 ```
 
+### Example flow: Alice creates an XRP vault, deposits, withdraws, and deletes it (devnet only)
+
+> **Note:** Vault is a devnet-only feature (XLS-65 amendment not yet on testnet/mainnet).
+
+```bash
+# 1. Alice creates an XRP vault with a maximum capacity of 1,000,000 drops
+#    Use --asset 0 for XRP (not --asset XRP); vault is devnet-only (XLS-65)
+xrpl-up --node devnet vault create \
+  --asset 0 --assets-maximum 1000000 \
+  --seed sEdAliceXXXX... --json
+# → {"result":"success","vaultId":"69FE309...64chars","tx":"2DE659..."}
+
+# 2. Alice deposits 1 XRP into the vault
+xrpl-up --node devnet vault deposit \
+  --vault-id AABBCC...64chars --amount 1 --seed sEdAliceXXXX...
+
+# 3. Alice withdraws 0.5 XRP from the vault
+xrpl-up --node devnet vault withdraw \
+  --vault-id AABBCC...64chars --amount 0.5 --seed sEdAliceXXXX...
+
+# 4. Alice deletes the vault after withdrawing all assets
+xrpl-up --node devnet vault delete \
+  --vault-id AABBCC...64chars --seed sEdAliceXXXX...
+```
+
 ## did
 
 Manage Decentralized Identifiers (DIDs) on the XRP Ledger (XLS-40).
@@ -1428,6 +1999,24 @@ Delete the sender's on-chain Decentralized Identifier (DIDDelete).
 xrpl-up did delete --seed sEd...
 ```
 
+### Example flow: Alice publishes her DID, links it to a document, then deletes it
+
+```bash
+# 1. Alice publishes a DID with a URI pointing to her DID document
+xrpl-up --node testnet did set \
+  --uri https://alice.example.com/did.json \
+  --seed sEdAliceXXXX...
+
+# 2. Alice updates the DID to add attestation data
+xrpl-up --node testnet did set \
+  --uri https://alice.example.com/did-v2.json \
+  --data "attestation-payload" \
+  --seed sEdAliceXXXX...
+
+# 3. Alice deletes her on-chain DID
+xrpl-up --node testnet did delete --seed sEdAliceXXXX...
+```
+
 ## deposit-preauth
 
 Manage deposit preauthorizations on XRPL accounts.
@@ -1459,6 +2048,29 @@ List deposit preauthorizations for an account.
 
 ```bash
 xrpl-up deposit-preauth list rXXX... --json
+```
+
+### Example flow: Alice enables DepositAuth, pre-authorizes Bob, Bob sends a payment
+
+```bash
+# 1. Alice enables DepositAuth on her account (requires preauthorization to receive payments)
+xrpl-up --node testnet account set \
+  --set-flag depositAuth --seed sEdAliceXXXX...
+
+# 2. Alice pre-authorizes Bob to send payments directly to her
+xrpl-up --node testnet deposit-preauth set \
+  --authorize rBobXXXX... --seed sEdAliceXXXX...
+
+# 3. List Alice's preauthorizations
+xrpl-up --node testnet deposit-preauth list rAliceXXXX...
+
+# 4. Bob can now send XRP to Alice (bypasses DepositAuth)
+xrpl-up --node testnet payment \
+  --to rAliceXXXX... --amount 5 --seed sEdBobXXXX...
+
+# 5. Alice revokes Bob's preauthorization
+xrpl-up --node testnet deposit-preauth set \
+  --unauthorize rBobXXXX... --seed sEdAliceXXXX...
 ```
 
 ## Common Agent Workflows
