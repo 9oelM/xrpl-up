@@ -2,6 +2,7 @@ import { spawnSync } from "child_process";
 import net from "net";
 import { resolve } from "path";
 import Socket from "@xrplf/isomorphic/ws";
+import { startStatsSampler, stopStatsSampler, formatPeakStats, formatProcessMemory } from "./docker-stats";
 
 const LOCAL_WS_PORT = 6006;
 const LOCAL_FAUCET_HEALTH = "http://localhost:3001/health";
@@ -260,26 +261,19 @@ export async function setup(): Promise<void> {
   // Pre-fund one master wallet per worker fork. Each fork gets its own account,
   // eliminating cross-process genesis sequence conflicts when maxForks > 1.
   await prefundWorkerMasters();
+
+  // Start background Docker stats sampler to track peak resource usage
+  startStatsSampler();
 }
 
 export async function teardown(): Promise<void> {
-  // Print Docker container resource usage
-  try {
-    const stats = spawnSync(
-      "docker", ["stats", "--no-stream", "--format",
-        "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.PIDs}}"],
-      { encoding: "utf-8", timeout: 5_000 },
-    );
-    if (stats.stdout?.trim()) {
-      console.log(`[local-node] Container resource usage:\n${stats.stdout}`);
-    }
-  } catch { /* best effort */ }
-
-  const mem = process.memoryUsage();
-  console.log(
-    `[local-node] Test process memory: RSS=${(mem.rss / 1024 / 1024).toFixed(0)}MB ` +
-    `Heap=${(mem.heapUsed / 1024 / 1024).toFixed(0)}/${(mem.heapTotal / 1024 / 1024).toFixed(0)}MB`
-  );
+  // Stop the background stats sampler and print peak resource usage
+  stopStatsSampler();
+  const peakStats = formatPeakStats();
+  if (peakStats) {
+    console.log(`[local-node] Peak container resource usage:\n${peakStats}`);
+  }
+  console.log(`[local-node] Test process memory: ${formatProcessMemory()}`);
 
   if (process.env.XRPL_LOCAL_TEARDOWN === "1") {
     console.log("[local-node] Stopping local stack…");
