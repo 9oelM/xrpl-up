@@ -172,7 +172,7 @@ xrpl-up reset --snapshots
 
 What `xrpl-up reset` removes:
 - Running Docker containers (`docker compose down`)
-- The ledger volume (`xrpl-up-local-db`)
+- Ledger volumes (`xrpl-up-local-db` and `xrpl-up-local-peer-db` in consensus mode)
 - `~/.xrpl-up/local-accounts.json`
 - With `--snapshots`: `~/.xrpl-up/snapshots/` and all snapshot files
 
@@ -1157,9 +1157,10 @@ xrpl-up snapshot restore after-setup             # restore saved state
 xrpl-up accounts --local                         # snapshot accounts restored
 ```
 
-Snapshots are stored at `~/.xrpl-up/snapshots/` and are portable — copy them to any machine and restore. Each snapshot is a pair of files:
-- `<name>.tar.gz` — compressed NuDB ledger volume (typically 5–100 MB)
+Snapshots are stored at `~/.xrpl-up/snapshots/` and are portable — copy them to any machine and restore. Each snapshot produces three files:
+- `<name>.tar.gz` — compressed node DB volume: NuDB, SQLite (`ledger.db`, `transaction.db`), and `wallet.db` (typically 5–100 MB)
 - `<name>-accounts.json` — account store at snapshot time
+- `<name>-meta.json` — snapshot metadata (format version)
 
 ---
 
@@ -1296,10 +1297,12 @@ Account seeds, generated configs, and snapshots are stored at:
   docker-compose.yml          # generated on each start
   rippled.cfg                 # generated on each start (or custom via --config)
   snapshots/
-    before-amm.tar.gz         # ledger volume snapshot (--local-network mode)
+    before-amm.tar.gz         # node DB volume snapshot (--local-network mode)
     before-amm-accounts.json  # account store at snapshot time
+    before-amm-meta.json      # snapshot metadata
     after-setup.tar.gz
     after-setup-accounts.json
+    after-setup-meta.json
 ```
 
 `xrpl-up start` always recreates accounts fresh unless `--local-network` is used. `xrpl-up faucet` appends to the account store regardless of mode. `xrpl-up reset` clears the account store and Docker volume in one command.
