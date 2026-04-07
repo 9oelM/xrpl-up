@@ -238,6 +238,25 @@ export async function teardown(): Promise<void> {
     );
   }
 
+  // Print Docker container resource usage
+  try {
+    const stats = spawnSync(
+      "docker", ["stats", "--no-stream", "--format",
+        "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.PIDs}}"],
+      { encoding: "utf-8", timeout: 5_000 },
+    );
+    if (stats.stdout?.trim()) {
+      console.log(`[local-network-node] Container resource usage:\n${stats.stdout}`);
+    }
+  } catch { /* best effort */ }
+
+  // Print test process memory usage
+  const mem = process.memoryUsage();
+  console.log(
+    `[local-network-node] Test process memory: RSS=${(mem.rss / 1024 / 1024).toFixed(0)}MB ` +
+    `Heap=${(mem.heapUsed / 1024 / 1024).toFixed(0)}/${(mem.heapTotal / 1024 / 1024).toFixed(0)}MB`
+  );
+
   if (process.env.XRPL_LOCAL_TEARDOWN === "1") {
     console.log("[local-network-node] Stopping local stack…");
     stopLocalStack();
