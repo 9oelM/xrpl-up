@@ -6,6 +6,7 @@ import {
   fundMaster,
   initTicketPool,
   createFunded,
+  connectWithRetry,
 } from "../helpers/fund";
 
 // Budget: 35 tickets × 0.2 = 7 XRP; 31 wallets × 2 XRP = 62 XRP; total 69 ≤ 99 ✓
@@ -17,8 +18,9 @@ let client: Client;
 let master: Wallet;
 
 beforeAll(async () => {
-  client = new Client(XRPL_WS, { timeout: 60_000 });
-  await client.connect();
+  const ref = { client: new Client(XRPL_WS, { timeout: 60_000 }) };
+  await connectWithRetry(ref);
+  client = ref.client;
   master = await fundMaster(client);
   await initTicketPool(client, master, TICKET_COUNT);
 }, 120_000);

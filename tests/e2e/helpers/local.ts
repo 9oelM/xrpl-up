@@ -3,6 +3,35 @@ import { Client, Wallet, xrpToDrops } from "xrpl";
 export const XRPL_WS = "ws://localhost:6006";
 export const XRPL_WS_FALLBACK = "ws://localhost:6006";
 
+/**
+ * Connect a Client with retry. Under CI load (multiple forks hitting the same
+ * rippled), a single connect() can hang. Retry with a fresh Client if it
+ * doesn't resolve within `perAttemptMs`.
+ */
+export async function connectWithRetry(
+  clientRef: { client: Client },
+  maxAttempts = 3,
+  perAttemptMs = 30_000,
+): Promise<void> {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      await Promise.race([
+        clientRef.client.connect(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("connect timeout")), perAttemptMs),
+        ),
+      ]);
+      return;
+    } catch {
+      try { await clientRef.client.disconnect(); } catch { /* ignore */ }
+      if (i < maxAttempts - 1) {
+        clientRef.client = new Client(XRPL_WS, { timeout: 60_000 });
+      }
+    }
+  }
+  throw new Error(`Failed to connect to ${XRPL_WS} after ${maxAttempts} attempts`);
+}
+
 // Amount to fund each test wallet. Well above the 10 XRP base reserve on standalone.
 const FUND_AMOUNT_XRP = 100;
 
