@@ -23,7 +23,7 @@ interface AmendmentInfo {
 
 function resolveSourceUrl(from: string): string {
   const config = loadConfig();
-  // Allow named networks from config (mainnet, testnet, devnet, custom)
+  // Allow named networks from config (testnet, devnet, custom)
   try {
     const { config: netCfg } = resolveNetwork(config, from);
     return netCfg.url;

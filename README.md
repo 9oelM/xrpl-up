@@ -65,8 +65,6 @@ xrpl-up channel create rDestination... 10
 
 XRPL interaction commands are intentionally non-exhaustive. For complex or production-grade flows, use `xrpl.js` directly or call `rippled` RPC endpoints.
 
-> **⚠️ Mainnet safety:** XRPL interaction commands (`wallet`, `account`, `payment`, `trust`, `offer`, `amm`, `nft`, `mptoken`, `escrow`, `check`, `channel`, `ticket`, `clawback`, `credential`, `did`, `multisig`, `oracle`, `deposit-preauth`, `permissioned-domain`, `vault`) have **no mainnet guard**. Passing `--node mainnet` (or a mainnet WebSocket URL) will submit real transactions. These commands are intended for local and testnet development only.
-
 ### Global flag: `--node`
 
 All XRPL interaction commands accept a global `--node` option that sets the network target:
@@ -74,9 +72,9 @@ All XRPL interaction commands accept a global `--node` option that sets the netw
 | Value | Connects to |
 |-------|-------------|
 | `testnet` (default) | XRPL Testnet |
-| `devnet` | XRPL Devnet |
-| `mainnet` | XRPL Mainnet (caution) |
+| `devnet` | XRPL Devnet (may include pre-release amendments not yet supported by this tool) |
 | `local` | Local sandbox (`ws://localhost:6006`) |
+| `wss://...` | Any custom WebSocket URL |
 
 ```bash
 # Use local sandbox (start first with: xrpl-up start)
@@ -140,7 +138,7 @@ xrpl-up start --network devnet
 | `--exit-on-crash` | — | Exit with code 134 when rippled crashes (SIGABRT); disables container auto-restart |
 | `-a, --accounts <n>` | `10` | Number of accounts to pre-fund |
 
-> **Note:** The local sandbox is a clean-room environment — ledger starts at index 1 with only the genesis wallet. It is not a mirror of mainnet state. What matters is that transaction validation rules match the rippled version in use.
+> **Note:** The local sandbox is a clean-room environment — ledger starts at index 1 with only the genesis wallet. It is not a mirror of the public ledger. What matters is that transaction validation rules match the rippled version in use.
 >
 > **AMM / XLS-30 and MPT / XLS-33:** Both AMM and MPT (Multi-Purpose Token) are enabled by default in the local sandbox. xrpl-up uses the `[amendments]` section in `rippled.cfg` to force-enable the required amendments at genesis creation. No voting or ledger advancement is needed.
 
@@ -1033,6 +1031,8 @@ xrpl-up vault --help
 
 Inspect and manage XRPL amendments in the local sandbox. The local sandbox starts with a set of amendments baked into its genesis config; use `enable` to queue additional amendments (takes effect after `xrpl-up reset && xrpl-up start`).
 
+> **Devnet compatibility:** XRPL Devnet may enable pre-release amendments that are not yet supported by the rippled version bundled with this tool. If you encounter unsupported transaction types or behaviors on devnet, check whether the amendment is available in the local sandbox with `xrpl-up amendment list --local --diff devnet`.
+
 > **Local only for mutations:** `enable` writes to the genesis config and only applies to the local sandbox. `list` and `info` work on any network.
 
 #### `xrpl-up amendment list`
@@ -1046,8 +1046,8 @@ xrpl-up amendment list --local
 # List disabled amendments only
 xrpl-up amendment list --local --disabled
 
-# Side-by-side diff: local vs mainnet
-xrpl-up amendment list --local --diff mainnet
+# Side-by-side diff: local vs testnet
+xrpl-up amendment list --local --diff testnet
 
 # List amendments on testnet
 xrpl-up amendment list --network testnet
@@ -1059,7 +1059,7 @@ Shows full details for a single amendment. Accepts the amendment name or a hash 
 
 ```bash
 xrpl-up amendment info PermissionedDomains --local
-xrpl-up amendment info AMM --network mainnet
+xrpl-up amendment info AMM --network testnet
 xrpl-up amendment info A730EB18 --local   # hash prefix lookup
 ```
 
@@ -1077,7 +1077,7 @@ xrpl-up amendment enable PermissionedDomains --local
 xrpl-up amendment enable PermissionedDomains --local --auto-reset
 ```
 
-> **Standalone mode only.** `enable` modifies the genesis config and only takes effect after a reset — it requires standalone mode (`xrpl-up start` without `--local-network`). In `--local-network` (consensus) mode, all mainnet amendments are pre-activated in the genesis ledger and cannot be changed — just like mainnet, activated amendments are permanent. To undo an `enable`, simply run `xrpl-up reset` without re-enabling the amendment.
+> **Standalone mode only.** `enable` modifies the genesis config and only takes effect after a reset — it requires standalone mode (`xrpl-up start` without `--local-network`). In `--local-network` (consensus) mode, all production amendments are pre-activated in the genesis ledger and cannot be changed — once activated, amendments are permanent. To undo an `enable`, simply run `xrpl-up reset` without re-enabling the amendment.
 
 ---
 

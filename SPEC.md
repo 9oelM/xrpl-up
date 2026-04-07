@@ -42,7 +42,7 @@
 2. **Ephemerality by default** — the sandbox resets to a clean slate on every start unless `--persist` is specified.
 3. **Developer trust, not production security** — keys and seeds are printed to stdout by design. Production workflows should use their own key management.
 4. **Composable** — `xrpl-up` is both a CLI and a library (`src/index.ts`). Scripts run via `xrpl-up run` import from `xrpl-up` directly.
-5. **Mainnet guardrails** — destructive / irreversible commands check `isMainnet()` and refuse or warn accordingly.
+5. **Production guardrails** — `isMainnet()` detects known production URLs and blocks sandbox/faucet operations; wrapper commands emit a warning.
 6. **Wrapping, not replacing** — XRPL interaction commands (`wallet`, `account`, `payment`, `mptoken`, `trust`, etc.) are convenience tooling for demos and quick experiments, not a full RPC client. Complex flows should use `xrpl.js` directly.
 
 ### 1.4 What It Is NOT
@@ -180,8 +180,8 @@ When `--exit-on-crash` is set, two changes are applied to the Docker Compose:
 |---|---|---|
 | `loadConfig()` | function | Loads `xrpl-up.config.js/.json/.xrpl-up.json`; falls back to `DEFAULT_CONFIG` |
 | `resolveNetwork(config, name?)` | function | Returns `{ name, config: NetworkConfig }` for a named network |
-| `isMainnet(networkName, networkConfig)` | function | Returns `true` if the network is mainnet (by name or URL pattern) |
-| `DEFAULT_CONFIG` | const | Built-in network definitions (local/testnet/devnet/mainnet) |
+| `isMainnet(networkName, networkConfig)` | function | Returns `true` if the URL matches known production endpoints |
+| `DEFAULT_CONFIG` | const | Built-in network definitions (local/testnet/devnet) |
 | `NetworkManager` | class | Thin wrapper over `xrpl.Client` with connect/disconnect/subscribe |
 | `WalletStore` | class | JSON-backed account store; `add()`, `all()`, `clear()`, `toWallet()`, `addForked()` |
 | `getRunContext()` | function | Returns `{ networkKey, networkUrl, networkName }` from injected env vars |
@@ -207,12 +207,9 @@ const store = new WalletStore(networkKey);
 | `local` | `ws://localhost:6006` | `http://localhost:3001` (genesis wallet, no rate limit) | Requires Docker |
 | `testnet` | `wss://s.altnet.rippletest.net:51233` | XRPL public testnet faucet | Rate limited |
 | `devnet` | `wss://s.devnet.rippletest.net:51233` | XRPL public devnet faucet | Rate limited; may include pre-release amendments |
-| `mainnet` | `wss://xrplcluster.com` | None | No faucet; most mutation commands refuse to run |
-
 **Custom network:** Any additional named network can be added to `xrpl-up.config.js`. Custom networks behave identically to built-ins for read-only commands. Faucet commands only support `local`, `testnet`, and `devnet`.
 
-**`isMainnet()` detection rules:**
-- Network name is `"mainnet"`, **or**
+**`isMainnet()` detection rules (URL-based, best-effort):**
 - URL contains `xrplcluster.com`, `s1.ripple.com`, or `s2.ripple.com`
 
 ---
@@ -243,7 +240,7 @@ const store = new WalletStore(networkKey);
 |---|---|
 | `-v, --version` | Print version and exit |
 | `--help` | Print help for any command or subcommand |
-| `--node <url\|name>` | XRPL node for interaction commands: `mainnet`, `testnet` (default), `devnet`, or a raw WebSocket URL (e.g. `ws://localhost:6006`). Set via `XRPL_NODE` env var. Ignored by sandbox lifecycle commands. |
+| `--node <url\|name>` | XRPL node for interaction commands: `testnet` (default), `devnet`, `local`, or a raw WebSocket URL (e.g. `ws://localhost:6006`). Set via `XRPL_NODE` env var. Ignored by sandbox lifecycle commands. |
 
 ### 4.3 Command Inventory
 
@@ -660,7 +657,7 @@ Snapshots capture the full state of a `--persist` session: ledger database + acc
 
 ### 5.6 Fork Mode
 
-Fork mode seeds the local sandbox with real account balances from a remote network. Useful for reproducing mainnet state locally.
+Fork mode seeds the local sandbox with real account balances from a remote network. Useful for reproducing public ledger state locally.
 
 **Flags:**
 - `--fork` — enables fork mode (requires `--local`)
@@ -813,7 +810,6 @@ interface NetworkConfig {
     local:   { url: 'ws://localhost:6006',                   name: 'Local Sandbox' },
     testnet: { url: 'wss://s.altnet.rippletest.net:51233',   name: 'XRPL Testnet' },
     devnet:  { url: 'wss://s.devnet.rippletest.net:51233',   name: 'XRPL Devnet' },
-    mainnet: { url: 'wss://xrplcluster.com',                 name: 'XRPL Mainnet' },
   },
   defaultNetwork: 'testnet',
   accounts: { count: 10 },
@@ -889,10 +885,11 @@ When `--exit-on-crash` is active and the foreground process is running, a `docke
 - `--detach` automatically enables `--no-secrets` (no terminal to read from in CI).
 - Seeds are stored in plaintext in `~/.xrpl-up/{network}-accounts.json`.
 
-### 8.2 Mainnet Protection
+### 8.2 Production URL Detection
 
-`isMainnet()` checks network name and URL patterns. Commands that could cause financial loss on mainnet:
-- Mutation commands (`faucet`, `amm create`, `nft mint`, etc.) check the active network; if mainnet is detected they either refuse entirely or require confirmation.
+`isMainnet()` detects known production URLs (`xrplcluster.com`, `s1.ripple.com`, `s2.ripple.com`). "Mainnet" is not a named network — users cannot pass `--network mainnet`. However, if a user provides a raw production URL (e.g. `--node wss://xrplcluster.com`), the CLI detects this and:
+- `faucet` and `start` commands refuse to proceed.
+- Wrapper commands (e.g. `payment`, `nft mint`) print a stderr warning: "xrpl-up is intended for local and test network development only."
 - The local genesis seed (`snoPBrXtMeMyMHUVTgbuqAfg1SUTb`) is only usable on the local sandbox. It controls 100B XRP that exist only in the isolated Docker container.
 
 ### 8.3 Local-Only Restrictions
@@ -923,6 +920,7 @@ Required for all `--local` commands. Any Docker Engine version that supports Com
 - The `[amendments]` section in `rippled.cfg` lists amendments verified against **rippled 3.1.1**.
 - Pinning to a specific tag (`--image xrpllabsofficial/xrpld:3.1.1`) is supported via `--image`.
 - If a new rippled release adds amendments not in the `[amendments]` stanza, use `xrpl-up amendment enable <name> --local` to queue them for the next genesis start.
+- **Devnet compatibility:** XRPL Devnet may enable pre-release amendments ahead of the rippled version bundled with this tool. Transactions relying on such amendments may fail on the local sandbox. Use `xrpl-up amendment list --local --diff devnet` to identify gaps.
 
 ### 9.4 xrpl.js Compatibility
 
