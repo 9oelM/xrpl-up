@@ -98,27 +98,6 @@ program
     'Start a 2-node consensus network (persistent state, snapshot support)'
   )
   .option(
-    '--fork',
-    'Fork XRP balances from a remote network into the local node (requires --local)'
-  )
-  .option(
-    '--fork-accounts <addresses>',
-    'Comma-separated addresses to fork (optional if --add-accounts-from-ledger is given)'
-  )
-  .option(
-    '--add-accounts-from-ledger <ledger>',
-    'Scan this ledger for active accounts and add them to the fork'
-  )
-  .option(
-    '--fork-at-ledger <ledger>',
-    'Ledger index to snapshot balances from (default: N-1 when --add-accounts-from-ledger is used, latest otherwise)'
-  )
-  .option(
-    '--fork-source <url>',
-    'WebSocket URL of the network to fork from',
-    'wss://xrplcluster.com'
-  )
-  .option(
     '--no-auto-advance',
     'Disable automatic ledger advancement'
   )
@@ -149,11 +128,6 @@ program
     localNetwork?: boolean;
     image?: string;
     ledgerInterval: string;
-    fork?: boolean;
-    forkAccounts?: string;
-    addAccountsFromLedger?: string;
-    forkAtLedger?: string;
-    forkSource?: string;
     autoAdvance?: boolean;
     debug?: boolean;
     detach?: boolean;
@@ -169,11 +143,6 @@ program
       localNetwork: opts.localNetwork ?? false,
       image: opts.image,
       ledgerInterval: parseInt(opts.ledgerInterval, 10),
-      fork: opts.fork,
-      forkAccounts: opts.forkAccounts,
-      accountsFromLedger: opts.addAccountsFromLedger ? parseInt(opts.addAccountsFromLedger, 10) : undefined,
-      forkAtLedger: opts.forkAtLedger ? parseInt(opts.forkAtLedger, 10) : undefined,
-      forkSource: opts.forkSource,
       noAutoAdvance: opts.autoAdvance === false,
       noSecrets: opts.secrets === false,
       debug: opts.debug,
