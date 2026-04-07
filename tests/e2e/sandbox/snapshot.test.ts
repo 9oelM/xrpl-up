@@ -174,7 +174,7 @@ describe("snapshot rollback", () => {
     // Faucet returns before ledger close (~4s). Must wait for the account to
     // appear on the validated ledger before saving — otherwise snapshot save
     // stops the node and the funding tx may not be in the tarball.
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 30; i++) {
       const result = runXrplUp(
         ["accounts", "--local", "--address", preSnapshotAddress],
         {},
@@ -183,7 +183,7 @@ describe("snapshot rollback", () => {
       if (result.status === 0) return;
       await new Promise(r => setTimeout(r, 2000));
     }
-    throw new Error(`Account A (${preSnapshotAddress}) not validated after 30s`);
+    throw new Error(`Account A (${preSnapshotAddress}) not validated after 60s`);
   });
 
   it("save snapshot (captures account A)", () => {
@@ -200,7 +200,10 @@ describe("snapshot rollback", () => {
   });
 
   it("wait for account B to be validated", async () => {
-    for (let i = 0; i < 15; i++) {
+    // After snapshot save resumes the sandbox, consensus needs time to
+    // re-establish and produce validated ledgers. On CI (2 vCPU) this
+    // can take 30-40s. Use 60s timeout.
+    for (let i = 0; i < 30; i++) {
       const result = runXrplUp(
         ["accounts", "--local", "--address", postSnapshotAddress],
         {},
@@ -209,7 +212,7 @@ describe("snapshot rollback", () => {
       if (result.status === 0) return;
       await new Promise(r => setTimeout(r, 2000));
     }
-    throw new Error(`Account B (${postSnapshotAddress}) not validated after 30s`);
+    throw new Error(`Account B (${postSnapshotAddress}) not validated after 60s`);
   });
 
   it("restore snapshot (rolls back to pre-B state)", () => {
