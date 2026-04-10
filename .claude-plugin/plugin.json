@@ -5,10 +5,10 @@
   "author": {
     "name": "ripple"
   },
-  "repository": "https://github.com/ripple/xrpl-up",
-  "homepage": "https://github.com/ripple/xrpl-up",
+  "repository": "https://github.com/9oelM/xrpl-up",
+  "homepage": "https://github.com/9oelM/xrpl-up",
   "license": "MIT",
-  "skills": "./skills/",
+  "skills": "../skills/",
   "keywords": [
     "xrpl",
     "xrp",

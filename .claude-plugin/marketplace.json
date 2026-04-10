@@ -3,7 +3,7 @@
   "name": "xrpl-up",
   "description": "Spin up local XRPL nodes, manage sandboxes, and interact with the XRP Ledger in a local development environment",
   "owner": {
-    "name": "ripple"
+    "name": "9oelm"
   },
   "plugins": [
     {
@@ -11,12 +11,12 @@
       "description": "Spin up local XRPL nodes, manage sandboxes, and interact with the XRP Ledger in a local development environment",
       "version": "0.1.0",
       "author": {
-        "name": "ripple"
+        "name": "9oelm"
       },
       "source": "./",
       "category": "development",
-      "homepage": "https://github.com/ripple/xrpl-up",
-      "repository": "https://github.com/ripple/xrpl-up",
+      "homepage": "https://github.com/9oelm/xrpl-up",
+      "repository": "https://github.com/9oelm/xrpl-up",
       "license": "MIT",
       "keywords": [
         "xrpl",
