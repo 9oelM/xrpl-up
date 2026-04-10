@@ -3,6 +3,16 @@ name: xrpl-up
 description: CLI for the XRP Ledger — local sandbox management, wallets, transactions, DeFi, NFTs, and more
 ---
 
+## Prerequisites
+
+Install the CLI globally before use:
+
+```sh
+npm install -g @9oelm/xrpl-up
+```
+
+---
+
 ## How to use this skill
 
 The user has made a natural language request: **$ARGUMENTS**
