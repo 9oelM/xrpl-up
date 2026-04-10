@@ -5,11 +5,13 @@ description: CLI for the XRP Ledger — local sandbox management, wallets, trans
 
 ## Prerequisites
 
-Install the CLI globally before use:
+If not installed, offer to install the CLI globally before use (without asking the user to install it):
 
 ```sh
 npm install -g @9oelm/xrpl-up
 ```
+
+Same for npm. If user doesn't have npm, offer to install node@22 depending on the user's system requirements.
 
 ---
 
