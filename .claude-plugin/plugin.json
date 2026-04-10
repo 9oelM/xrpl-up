@@ -8,7 +8,7 @@
   "repository": "https://github.com/9oelM/xrpl-up",
   "homepage": "https://github.com/9oelM/xrpl-up",
   "license": "MIT",
-  "skills": "../skills/",
+  "skills": "./skills/",
   "keywords": [
     "xrpl",
     "xrp",
